@@ -13,5 +13,5 @@ done
 root=$(CDPATH= cd -P -- "$(dirname -- "$source")/.." && pwd)
 exec bun run \
   --preload "$root/node_modules/@opentui/solid/scripts/preload.js" \
-  --tsconfig-override "$root/tsconfig.json" \
+  --jsx-import-source @opentui/solid \
   "$root/src/index.tsx" "$@"
