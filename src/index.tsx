@@ -136,22 +136,26 @@ function App() {
     if (pressed(KEYBINDS.pageDown)) {
       if (activePane() === PANE.files) {
         setSelected((index) => Math.min(index + halfPage(), Math.max(result().data.length - 1, 0)))
+        setSelectedDiffLine(0)
       } else {
         scrollDiff(diff, halfPage())
+        setSelectedDiffLine((line) => moveDiffSelection(diff, line, halfPage()))
       }
     }
     if (pressed(KEYBINDS.pageUp)) {
       if (activePane() === PANE.files) {
         setSelected((index) => Math.max(index - halfPage(), 0))
+        setSelectedDiffLine(0)
       } else {
         scrollDiff(diff, -halfPage())
+        setSelectedDiffLine((line) => moveDiffSelection(diff, line, -halfPage()))
       }
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.nextChange)) {
-      moveToChange(diff, current()?.patch ?? "", view(), 1)
+      setSelectedDiffLine((line) => moveToChange(diff, current()?.patch ?? "", view(), line, 1))
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.previousChange)) {
-      moveToChange(diff, current()?.patch ?? "", view(), -1)
+      setSelectedDiffLine((line) => moveToChange(diff, current()?.patch ?? "", view(), line, -1))
     }
     if (pressed(KEYBINDS.refresh)) {
       void refresh()

@@ -181,20 +181,18 @@ export function moveToChange(
   diff: DiffRenderable | undefined,
   patch: string,
   view: DiffView,
+  line: number,
   direction: -1 | 1,
 ) {
-  if (!diff) return
-  const codeRenderables = getCodeRenderables(diff)
-  const scrollTop = codeRenderables[0]?.scrollY ?? 0
-  const lineSources = codeRenderables[0]?.lineInfo.lineSources ?? []
-  const offsets = getChangeOffsets(patch, view).map((offset) => {
-    const visualRow = lineSources.findIndex((source) => source >= offset)
-    return visualRow >= 0 ? visualRow : offset
-  })
+  const offsets = getChangeOffsets(patch, view)
   const target = direction === 1
-    ? offsets.find((offset) => offset > scrollTop)
-    : offsets.findLast((offset) => offset < scrollTop)
+    ? offsets.find((offset) => offset > line)
+    : offsets.findLast((offset) => offset < line)
 
-  if (target === undefined) return
-  for (const code of codeRenderables) code.scrollY = target
+  if (target === undefined) return line
+  for (const code of getCodeRenderables(diff)) {
+    const visualLine = code.lineInfo.lineSources.findIndex((source) => source === target)
+    code.scrollY = visualLine >= 0 ? visualLine : target
+  }
+  return target
 }
