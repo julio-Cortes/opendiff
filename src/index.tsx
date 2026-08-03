@@ -49,7 +49,7 @@ function App() {
   const [result, setResult] = createSignal(initialResult)
   const [selected, setSelected] = createSignal(0)
   const [selectedDiffLine, setSelectedDiffLine] = createSignal(0)
-  const [activePane, setActivePane] = createSignal<Pane>(PANE.files)
+  const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
   const [view, setView] = createSignal<DiffView>(initialSettings.view)
   const [wrap, setWrap] = createSignal<DiffWrap>(initialSettings.wrap)
   const current = () => result().data[selected()]
