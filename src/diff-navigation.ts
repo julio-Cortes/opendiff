@@ -49,12 +49,11 @@ export function markDiffComments(
   diff: DiffRenderable | undefined,
   ranges: Array<{ start: number; end: number }>,
   color: string,
-  reset = false,
 ) {
   if (!diff) return
 
   const previous = commentSigns.get(diff)
-  if (previous && !reset) {
+  if (previous) {
     for (const saved of previous) {
       if (saved.sign) saved.renderable.setLineSign(saved.line, saved.sign)
       else saved.renderable.clearLineSign(saved.line)
@@ -102,12 +101,11 @@ export function highlightDiffRange(
   start: number,
   end: number,
   color: string,
-  reset = false,
 ) {
   if (!diff) return
 
   const previous = selectedLines.get(diff)
-  if (previous && !reset) {
+  if (previous) {
     for (const line of previous) {
       for (const saved of line.colors) {
         if (saved.gutter || saved.content) {
@@ -146,6 +144,67 @@ export function highlightDiffRange(
     if (visualLine < code.scrollY) code.scrollY = visualLine
     if (visualLine >= code.scrollY + code.height) code.scrollY = visualLine - code.height + 1
   }
+}
+
+export function remapDiffLine(patch: string, from: DiffView, to: DiffView, line: number) {
+  if (from === to) return line
+
+  const lines: Array<string | undefined> = []
+  let inHunk = false
+  for (const patchLine of patch.split("\n")) {
+    if (patchLine.startsWith("@@")) {
+      if (inHunk) lines.push(undefined)
+      inHunk = true
+      continue
+    }
+    if (inHunk && /^[ +\-\\]/.test(patchLine)) lines.push(patchLine)
+  }
+
+  let index = 0
+  let fromRow = 0
+  let toRow = 0
+  while (index < lines.length) {
+    const marker = lines[index]?.[0]
+    if (marker === undefined) {
+      index++
+      continue
+    }
+    if (marker === "\\") {
+      index++
+      continue
+    }
+    if (marker === " ") {
+      if (line === fromRow) return toRow
+      fromRow++
+      toRow++
+      index++
+      continue
+    }
+
+    let additions = 0
+    let deletions = 0
+    while (index < lines.length && lines[index]?.[0] !== " " && lines[index]?.[0] !== undefined) {
+      if (lines[index]?.[0] === "+") additions++
+      if (lines[index]?.[0] === "-") deletions++
+      index++
+    }
+
+    const fromSize = from === DIFF_VIEW.unified ? additions + deletions : Math.max(additions, deletions)
+    const toSize = to === DIFF_VIEW.unified ? additions + deletions : Math.max(additions, deletions)
+    if (line < fromRow + fromSize) {
+      const offset = line - fromRow
+      if (from === DIFF_VIEW.unified) {
+        const item = offset < deletions ? offset : offset - deletions
+        return toRow + Math.min(item, Math.max(toSize - 1, 0))
+      }
+      if (offset < additions) return toRow + deletions + offset
+      return toRow + Math.min(offset, Math.max(deletions - 1, 0))
+    }
+    fromRow += fromSize
+    toRow += toSize
+  }
+
+  return line
 }
 
 export function getDiffLineNumber(

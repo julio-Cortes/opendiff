@@ -30,6 +30,7 @@ import {
   moveDiffSelection,
   moveDiffSelectionByVisualRows,
   moveToChange,
+  remapDiffLine,
 } from "./diff-navigation"
 import { loadReviewComments, saveReviewComments, type ReviewComment } from "./review-comments"
 import { loadSettings, saveSettings } from "./settings"
@@ -82,8 +83,6 @@ function App() {
   const selectedComments = () => currentComments().filter((comment) =>
     comment.start <= selectedDiffLine() && comment.end >= selectedDiffLine()
   )
-  let highlightedDiff = ""
-  let markedDiff = ""
   const halfPage = () => {
     const height = activePane() === PANE.files ? fileList?.height : diff?.height
     return Math.max(Math.floor((height ?? 2) / 2), 1)
@@ -207,19 +206,18 @@ function App() {
   createEffect(() => {
     const line = selectedDiffLine()
     const anchor = selectionAnchor() ?? line
-    const key = `${current()?.file}\0${current()?.patch}\0${view()}\0${wrap()}`
-    const reset = key !== highlightedDiff
-    highlightedDiff = key
-    queueMicrotask(() => highlightDiffRange(diff, anchor, line, COLORS.selection, reset))
+    current()?.patch
+    view()
+    wrap()
+    queueMicrotask(() => queueMicrotask(() => highlightDiffRange(diff, anchor, line, COLORS.selection)))
   })
 
   createEffect(() => {
     const visible = commentsVisible()
     const ranges = visible ? currentComments() : []
-    const key = `${current()?.file}\0${current()?.patch}\0${view()}\0${wrap()}`
-    const reset = key !== markedDiff
-    markedDiff = key
-    queueMicrotask(() => markDiffComments(diff, ranges, COLORS.comment, reset))
+    view()
+    wrap()
+    queueMicrotask(() => queueMicrotask(() => markDiffComments(diff, ranges, COLORS.comment)))
   })
 
   useKeyboard((key) => {
@@ -369,6 +367,7 @@ function App() {
     }
     if (pressed(KEYBINDS.toggleView)) {
       const nextView = view() === DIFF_VIEW.unified ? DIFF_VIEW.split : DIFF_VIEW.unified
+      setSelectedDiffLine((line) => remapDiffLine(current()?.patch ?? "", view(), nextView, line))
       setSelectionAnchor()
       setView(nextView)
       void saveSettings({ view: nextView, wrap: wrap() })
