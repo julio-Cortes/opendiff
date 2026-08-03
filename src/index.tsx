@@ -65,6 +65,7 @@ function App() {
   const [selectedDiffLine, setSelectedDiffLine] = createSignal(0)
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>()
   const [commentDraft, setCommentDraft] = createSignal<CommentDraft>()
+  const [editingComment, setEditingComment] = createSignal<ReviewComment>()
   const [comments, setComments] = createSignal<ReviewComment[]>([])
   const [commentsVisible, setCommentsVisible] = createSignal(false)
   const [submittingComments, setSubmittingComments] = createSignal(false)
@@ -125,10 +126,21 @@ function App() {
     }
   }
 
-  const addComment = () => {
+  const saveComment = () => {
     const draft = commentDraft()
+    const editing = editingComment()
     const text = commentEditor?.plainText.trim()
-    if (!draft || !text) return
+    if (!text) return
+    if (editing) {
+      setComments((current) => {
+        const next = current.map((comment) => comment.id === editing.id ? { ...comment, body: text } : comment)
+        void saveReviewComments(editing.repository, editing.sessionID, next)
+        return next
+      })
+      setEditingComment()
+      return
+    }
+    if (!draft) return
     setComments((current) => {
       const next = [...current, {
         ...draft,
@@ -212,8 +224,11 @@ function App() {
     const pressed = (bindings: readonly Keybind[]) =>
       bindings.some((binding) => binding.name === key.name && Boolean(binding.ctrl) === key.ctrl)
 
-    if (commentDraft()) {
-      if (key.name === "escape") setCommentDraft()
+    if (commentDraft() || editingComment()) {
+      if (key.name === "escape") {
+        setCommentDraft()
+        setEditingComment()
+      }
       return
     }
     if (selectionAnchor() !== undefined && key.name === "escape") {
@@ -318,6 +333,10 @@ function App() {
     if (pressed(KEYBINDS.comments)) {
       setCommentsVisible((visible) => !visible)
     }
+    if (activePane() === PANE.diff && pressed(KEYBINDS.editComment)) {
+      const editable = selectedComments().find((comment) => comment.status === "draft")
+      if (editable) setEditingComment(editable)
+    }
     if (pressed(KEYBINDS.sendComments)) {
       void submitComments()
     }
@@ -389,7 +408,7 @@ function App() {
       )}
 
       <Footer activePane={activePane()} />
-      <Show when={commentDraft()}>
+      <Show when={commentDraft() || editingComment()}>
         <box
           position="absolute"
           top={0}
@@ -410,13 +429,14 @@ function App() {
             borderColor={COLORS.comment}
             backgroundColor={COLORS.panel}
           >
-            <text fg={COLORS.textStrong}><b>Add review comment</b></text>
+            <text fg={COLORS.textStrong}><b>{editingComment() ? "Edit review comment" : "Add review comment"}</b></text>
             <text fg={COLORS.textMuted}>
-              {commentDraft()?.file} rows {(commentDraft()?.start ?? 0) + 1}-{(commentDraft()?.end ?? 0) + 1}
+              {(commentDraft() ?? editingComment())?.file} rows {((commentDraft() ?? editingComment())?.start ?? 0) + 1}-{((commentDraft() ?? editingComment())?.end ?? 0) + 1}
             </text>
             <textarea
               ref={(element) => (commentEditor = element)}
               focused
+              initialValue={editingComment()?.body}
               placeholder="Write a review comment"
               flexGrow={1}
               wrapMode="word"
@@ -428,7 +448,7 @@ function App() {
                 { name: "return", action: "submit" },
                 { name: "return", shift: true, action: "newline" },
               ]}
-              onSubmit={addComment}
+              onSubmit={saveComment}
             />
             <text fg={COLORS.textMuted}>enter submit  S-enter newline  esc cancel</text>
           </box>

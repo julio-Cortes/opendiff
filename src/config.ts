@@ -67,6 +67,7 @@ export const KEYBINDS = {
   quit: [{ name: "q" }, { name: "escape" }, { name: "c", ctrl: true }],
   down: [{ name: "j" }, { name: "down" }],
   edit: [{ name: "e" }],
+  editComment: [{ name: "i" }],
   nextChange: [{ name: "]" }],
   pageDown: [{ name: "d", ctrl: true }],
   pageUp: [{ name: "u", ctrl: true }],
