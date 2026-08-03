@@ -500,8 +500,24 @@ function App() {
                   >
                     <text fg={COLORS.textMuted}>{comment.file}:{comment.start + 1}-{comment.end + 1}  [{comment.status}]</text>
                     <text fg={COLORS.text}>{comment.body}</text>
-                    <Show when={comment.replies.length > 0}>
-                      <text fg={COLORS.syntaxProperty}>{comment.replies.length} replies</text>
+                    <Show when={index() === commentListIndex()}>
+                      <For each={comment.replies}>
+                        {(reply) => (
+                          <box
+                            flexDirection="column"
+                            border={["left"]}
+                            borderStyle="single"
+                            borderColor={reply.role === "assistant" ? COLORS.syntaxProperty : COLORS.comment}
+                            paddingLeft={1}
+                            marginTop={1}
+                          >
+                            <text fg={reply.role === "assistant" ? COLORS.syntaxProperty : COLORS.comment}>
+                              <b>{reply.role === "assistant" ? "Agent" : "You"}</b>
+                            </text>
+                            <text fg={COLORS.text}>{reply.body}</text>
+                          </box>
+                        )}
+                      </For>
                     </Show>
                   </box>
                 )}
