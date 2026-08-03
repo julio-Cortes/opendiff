@@ -75,6 +75,7 @@ export const KEYBINDS = {
   toggleMode: [{ name: "b" }],
   toggleView: [{ name: "s" }],
   toggleWrap: [{ name: "w" }],
+  visual: [{ name: "v" }],
 } as const satisfies Record<string, readonly Keybind[]>
 
 export const FILE_STATUS = {

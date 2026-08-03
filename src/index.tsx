@@ -25,7 +25,7 @@ import {
 } from "./config"
 import {
   getDiffLineNumber,
-  highlightDiffLine,
+  highlightDiffRange,
   moveDiffSelection,
   moveToChange,
   scrollDiff,
@@ -58,6 +58,7 @@ function App() {
   const [session, setSession] = createSignal<(typeof initialSessions.data)[number]>()
   const [selected, setSelected] = createSignal(0)
   const [selectedDiffLine, setSelectedDiffLine] = createSignal(0)
+  const [selectionAnchor, setSelectionAnchor] = createSignal<number>()
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
   const [view, setView] = createSignal<DiffView>(initialSettings.view)
@@ -77,6 +78,7 @@ function App() {
 
     setResult(next)
     setSelected(nextSelected)
+    setSelectionAnchor()
     if (nextMode !== mode()) setSelectedDiffLine(0)
     setMode(nextMode)
   }
@@ -109,16 +111,21 @@ function App() {
 
   createEffect(() => {
     const line = selectedDiffLine()
+    const anchor = selectionAnchor() ?? line
     const key = `${current()?.file}\0${current()?.patch}\0${view()}\0${wrap()}`
     const reset = key !== highlightedDiff
     highlightedDiff = key
-    queueMicrotask(() => highlightDiffLine(diff, line, COLORS.selection, reset))
+    queueMicrotask(() => highlightDiffRange(diff, anchor, line, COLORS.selection, reset))
   })
 
   useKeyboard((key) => {
     const pressed = (bindings: readonly Keybind[]) =>
       bindings.some((binding) => binding.name === key.name && Boolean(binding.ctrl) === key.ctrl)
 
+    if (selectionAnchor() !== undefined && key.name === "escape") {
+      setSelectionAnchor()
+      return
+    }
     if (pressed(KEYBINDS.quit)) {
       renderer.destroy()
       return
@@ -139,6 +146,7 @@ function App() {
     if (pressed(KEYBINDS.switchPane)) {
       key.preventDefault()
       key.stopPropagation()
+      setSelectionAnchor()
       setActivePane((pane) => pane === PANE.files ? PANE.diff : PANE.files)
       return
     }
@@ -146,6 +154,7 @@ function App() {
       if (activePane() === PANE.files) {
         setSelected((index) => Math.min(index + 1, Math.max(result().data.length - 1, 0)))
         setSelectedDiffLine(0)
+        setSelectionAnchor()
       } else {
         setSelectedDiffLine((line) => moveDiffSelection(diff, line, 1))
       }
@@ -154,6 +163,7 @@ function App() {
       if (activePane() === PANE.files) {
         setSelected((index) => Math.max(index - 1, 0))
         setSelectedDiffLine(0)
+        setSelectionAnchor()
       } else {
         setSelectedDiffLine((line) => moveDiffSelection(diff, line, -1))
       }
@@ -162,6 +172,7 @@ function App() {
       if (activePane() === PANE.files) {
         setSelected((index) => Math.min(index + halfPage(), Math.max(result().data.length - 1, 0)))
         setSelectedDiffLine(0)
+        setSelectionAnchor()
       } else {
         scrollDiff(diff, halfPage())
         setSelectedDiffLine((line) => moveDiffSelection(diff, line, halfPage()))
@@ -171,6 +182,7 @@ function App() {
       if (activePane() === PANE.files) {
         setSelected((index) => Math.max(index - halfPage(), 0))
         setSelectedDiffLine(0)
+        setSelectionAnchor()
       } else {
         scrollDiff(diff, -halfPage())
         setSelectedDiffLine((line) => moveDiffSelection(diff, line, -halfPage()))
@@ -181,6 +193,9 @@ function App() {
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.previousChange)) {
       setSelectedDiffLine((line) => moveToChange(diff, current()?.patch ?? "", view(), line, -1))
+    }
+    if (activePane() === PANE.diff && pressed(KEYBINDS.visual)) {
+      setSelectionAnchor((anchor) => anchor === undefined ? selectedDiffLine() : undefined)
     }
     if (pressed(KEYBINDS.refresh)) {
       void refresh()
@@ -193,6 +208,7 @@ function App() {
     }
     if (pressed(KEYBINDS.toggleView)) {
       const nextView = view() === DIFF_VIEW.unified ? DIFF_VIEW.split : DIFF_VIEW.unified
+      setSelectionAnchor()
       setView(nextView)
       void saveSettings({ view: nextView, wrap: wrap() })
     }
@@ -217,7 +233,7 @@ function App() {
       <box flexDirection="column" width="100%" height="100%" backgroundColor={COLORS.canvas}>
       <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.text}>
-          <b>opendiff</b>  {result().location.directory}  [{session()?.title ?? session()?.id}]  [{mode()}, {view()}, {wrap()}]
+          <b>opendiff</b>  {result().location.directory}  [{session()?.title ?? session()?.id}]  [{mode()}, {view()}, {wrap()}]{selectionAnchor() === undefined ? "" : "  [visual]"}
         </text>
       </box>
 
@@ -240,7 +256,8 @@ function App() {
             wrap={wrap()}
             onReady={(element) => {
               diff = element
-              highlightDiffLine(diff, selectedDiffLine(), COLORS.selection)
+              const line = selectedDiffLine()
+              highlightDiffRange(diff, selectionAnchor() ?? line, line, COLORS.selection)
             }}
           />
         </box>

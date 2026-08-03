@@ -10,7 +10,7 @@ type SelectedLine = {
   }>
 }
 
-const selectedLines = new WeakMap<DiffRenderable, SelectedLine>()
+const selectedLines = new WeakMap<DiffRenderable, SelectedLine[]>()
 
 function getCodeRenderables(diff: DiffRenderable | undefined) {
   const pending = diff ? [...diff.getChildren()] : []
@@ -45,9 +45,10 @@ export function moveDiffSelection(diff: DiffRenderable | undefined, line: number
   return Math.max(0, Math.min(line + amount, Math.max(lineCount - 1, 0)))
 }
 
-export function highlightDiffLine(
+export function highlightDiffRange(
   diff: DiffRenderable | undefined,
-  line: number,
+  start: number,
+  end: number,
   color: string,
   reset = false,
 ) {
@@ -55,32 +56,40 @@ export function highlightDiffLine(
 
   const previous = selectedLines.get(diff)
   if (previous && !reset) {
-    for (const saved of previous.colors) {
-      if (saved.gutter || saved.content) {
-        saved.renderable.setLineColor(previous.line, {
-          gutter: saved.gutter,
-          content: saved.content,
-        })
-      } else {
-        saved.renderable.clearLineColor(previous.line)
+    for (const line of previous) {
+      for (const saved of line.colors) {
+        if (saved.gutter || saved.content) {
+          saved.renderable.setLineColor(line.line, {
+            gutter: saved.gutter,
+            content: saved.content,
+          })
+        } else {
+          saved.renderable.clearLineColor(line.line)
+        }
       }
     }
   }
 
-  const colors = getLineNumberRenderables(diff).map((renderable) => {
-    const current = renderable.getLineColors()
-    const saved = {
-      renderable,
-      gutter: current.gutter.get(line),
-      content: current.content.get(line),
-    }
-    renderable.setLineColor(line, { gutter: color, content: color })
-    return saved
-  })
-  selectedLines.set(diff, { line, colors })
+  const selected: SelectedLine[] = []
+  const first = Math.min(start, end)
+  const last = Math.max(start, end)
+  for (let line = first; line <= last; line++) {
+    const colors = getLineNumberRenderables(diff).map((renderable) => {
+      const current = renderable.getLineColors()
+      const saved = {
+        renderable,
+        gutter: current.gutter.get(line),
+        content: current.content.get(line),
+      }
+      renderable.setLineColor(line, { gutter: color, content: color })
+      return saved
+    })
+    selected.push({ line, colors })
+  }
+  selectedLines.set(diff, selected)
 
   for (const code of getCodeRenderables(diff)) {
-    const visualLine = code.lineInfo.lineSources.findIndex((source) => source === line)
+    const visualLine = code.lineInfo.lineSources.findIndex((source) => source === end)
     if (visualLine < 0 || code.height === 0) continue
     if (visualLine < code.scrollY) code.scrollY = visualLine
     if (visualLine >= code.scrollY + code.height) code.scrollY = visualLine - code.height + 1
