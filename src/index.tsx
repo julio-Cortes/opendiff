@@ -24,11 +24,19 @@ type Keybind = {
   ctrl?: boolean
 }
 
+const DIFF_VIEW = {
+  unified: "unified",
+  split: "split",
+} as const
+
+type DiffView = (typeof DIFF_VIEW)[keyof typeof DIFF_VIEW]
+
 const KEYBINDS = {
   quit: [{ name: "q" }, { name: "escape" }, { name: "c", ctrl: true }],
   nextFile: [{ name: "j" }, { name: "down" }],
   previousFile: [{ name: "k" }, { name: "up" }],
   refresh: [{ name: "r" }],
+  toggleView: [{ name: "v" }],
 } as const satisfies Record<string, readonly Keybind[]>
 
 const FILE_STATUS = {
@@ -52,6 +60,7 @@ function App() {
   const renderer = useRenderer()
   const [result, setResult] = createSignal(initialResult)
   const [selected, setSelected] = createSignal(0)
+  const [view, setView] = createSignal<DiffView>(DIFF_VIEW.unified)
   const current = () => result().data[selected()]
 
   const refresh = async () => {
@@ -81,13 +90,16 @@ function App() {
     if (pressed(KEYBINDS.refresh)) {
       void refresh()
     }
+    if (pressed(KEYBINDS.toggleView)) {
+      setView((currentView) => currentView === DIFF_VIEW.unified ? DIFF_VIEW.split : DIFF_VIEW.unified)
+    }
   })
 
   return (
     <box flexDirection="column" width="100%" height="100%" backgroundColor={COLORS.canvas}>
       <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.text}>
-          <b>opendiff</b>  {result().location.directory}
+          <b>opendiff</b>  {result().location.directory}  [{view()}]
         </text>
       </box>
 
@@ -119,7 +131,7 @@ function App() {
             </box>
             <diff
               diff={current()?.patch ?? ""}
-              view="unified"
+              view={view()}
               showLineNumbers
               wrapMode="none"
               flexGrow={1}
@@ -133,7 +145,7 @@ function App() {
 
       <box height={1} paddingLeft={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.textMuted}>
-          {KEYBINDS.nextFile[0].name}/{KEYBINDS.previousFile[0].name} select  {KEYBINDS.refresh[0].name} refresh  {KEYBINDS.quit[0].name} quit
+          {KEYBINDS.nextFile[0].name}/{KEYBINDS.previousFile[0].name} select  {KEYBINDS.toggleView[0].name} view  {KEYBINDS.refresh[0].name} refresh  {KEYBINDS.quit[0].name} quit
         </text>
       </box>
     </box>
