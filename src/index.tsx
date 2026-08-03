@@ -31,6 +31,7 @@ import {
   moveDiffSelectionByVisualRows,
   moveToChange,
 } from "./diff-navigation"
+import { loadReviewComments, saveReviewComments, type ReviewComment } from "./review-comments"
 import { loadSettings, saveSettings } from "./settings"
 
 const endpoint = await Service.ensure()
@@ -49,17 +50,7 @@ const initialSessions = await client.session.list({
   order: "desc",
 })
 
-type ReviewComment = {
-  id: string
-  sessionID: string
-  file: string
-  patch: string
-  start: number
-  end: number
-  body: string
-}
-
-type CommentDraft = Omit<ReviewComment, "id" | "body">
+type CommentDraft = Omit<ReviewComment, "id" | "body" | "status" | "reply">
 
 function App() {
   const renderer = useRenderer()
@@ -137,9 +128,19 @@ function App() {
     const draft = commentDraft()
     const text = commentEditor?.plainText.trim()
     if (!draft || !text) return
-    setComments((current) => [...current, { ...draft, id: crypto.randomUUID(), body: text }])
+    setComments((current) => {
+      const next = [...current, { ...draft, id: crypto.randomUUID(), body: text, status: "draft" } satisfies ReviewComment]
+      void saveReviewComments(draft.repository, draft.sessionID, next)
+      return next
+    })
     setCommentDraft()
     setSelectionAnchor()
+  }
+
+  const selectSession = async (selectedSession: NonNullable<ReturnType<typeof session>>) => {
+    const repository = result().location.directory
+    setComments(await loadReviewComments(repository, selectedSession.id))
+    setSession(selectedSession)
   }
 
   createEffect(() => {
@@ -189,7 +190,7 @@ function App() {
       }
       if (pressed(KEYBINDS.select)) {
         const selectedSession = initialSessions.data[sessionIndex()]
-        if (selectedSession) setSession(selectedSession)
+        if (selectedSession) void selectSession(selectedSession)
       }
       return
     }
@@ -258,6 +259,7 @@ function App() {
         const line = selectedDiffLine()
         const anchor = selectionAnchor() ?? line
         setCommentDraft({
+          repository: result().location.directory,
           sessionID: selectedSession.id,
           file: file.file,
           patch: file.patch,
