@@ -1,4 +1,4 @@
-import { CodeRenderable, LineNumberRenderable, type DiffRenderable, type RGBA } from "@opentui/core"
+import { CodeRenderable, LineNumberRenderable, type DiffRenderable, type LineSign, type RGBA } from "@opentui/core"
 import { DIFF_VIEW, type DiffView } from "./config"
 
 type SelectedLine = {
@@ -11,6 +11,11 @@ type SelectedLine = {
 }
 
 const selectedLines = new WeakMap<DiffRenderable, SelectedLine[]>()
+const commentSigns = new WeakMap<DiffRenderable, Array<{
+  line: number
+  renderable: LineNumberRenderable
+  sign: LineSign | undefined
+}>>()
 
 function getCodeRenderables(diff: DiffRenderable | undefined) {
   const pending = diff ? [...diff.getChildren()] : []
@@ -38,6 +43,39 @@ function getLineNumberRenderables(diff: DiffRenderable) {
   }
 
   return lineNumbers
+}
+
+export function markDiffComments(
+  diff: DiffRenderable | undefined,
+  ranges: Array<{ start: number; end: number }>,
+  color: string,
+  reset = false,
+) {
+  if (!diff) return
+
+  const previous = commentSigns.get(diff)
+  if (previous && !reset) {
+    for (const saved of previous) {
+      if (saved.sign) saved.renderable.setLineSign(saved.line, saved.sign)
+      else saved.renderable.clearLineSign(saved.line)
+    }
+  }
+
+  const lines = new Set<number>()
+  for (const range of ranges) {
+    for (let line = range.start; line <= range.end; line++) lines.add(line)
+  }
+
+  const signs = []
+  for (const renderable of getLineNumberRenderables(diff)) {
+    const current = renderable.getLineSigns()
+    for (const line of lines) {
+      const sign = current.get(line)
+      signs.push({ line, renderable, sign })
+      renderable.setLineSign(line, { ...sign, after: "!", afterColor: color })
+    }
+  }
+  commentSigns.set(diff, signs)
 }
 
 export function moveDiffSelection(diff: DiffRenderable | undefined, line: number, amount: number) {

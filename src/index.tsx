@@ -2,7 +2,7 @@
 
 import { OpenCode } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/service"
-import type { DiffRenderable, ScrollBoxRenderable } from "@opentui/core"
+import type { DiffRenderable, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { render, useKeyboard, useRenderer } from "@opentui/solid"
 import { basename, resolve } from "node:path"
 import { createEffect, createSignal, For, Show } from "solid-js"
@@ -26,6 +26,7 @@ import {
 import {
   getDiffLineNumber,
   highlightDiffRange,
+  markDiffComments,
   moveDiffSelection,
   moveDiffSelectionByVisualRows,
   moveToChange,
@@ -64,6 +65,7 @@ function App() {
   const renderer = useRenderer()
   let fileList: ScrollBoxRenderable | undefined
   let diff: DiffRenderable | undefined
+  let commentEditor: TextareaRenderable | undefined
   let editing = false
   const [result, setResult] = createSignal(initialResult)
   const [sessionIndex, setSessionIndex] = createSignal(0)
@@ -73,12 +75,20 @@ function App() {
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>()
   const [commentDraft, setCommentDraft] = createSignal<CommentDraft>()
   const [comments, setComments] = createSignal<ReviewComment[]>([])
+  const [commentsVisible, setCommentsVisible] = createSignal(false)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
   const [view, setView] = createSignal<DiffView>(initialSettings.view)
   const [wrap, setWrap] = createSignal<DiffWrap>(initialSettings.wrap)
   const current = () => result().data[selected()]
+  const currentComments = () => comments().filter((comment) =>
+    comment.file === current()?.file && comment.patch === current()?.patch
+  )
+  const selectedComments = () => currentComments().filter((comment) =>
+    comment.start <= selectedDiffLine() && comment.end >= selectedDiffLine()
+  )
   let highlightedDiff = ""
+  let markedDiff = ""
   const halfPage = () => {
     const height = activePane() === PANE.files ? fileList?.height : diff?.height
     return Math.max(Math.floor((height ?? 2) / 2), 1)
@@ -123,10 +133,9 @@ function App() {
     }
   }
 
-  const addComment = (body: string | object) => {
-    if (typeof body !== "string") return
+  const addComment = () => {
     const draft = commentDraft()
-    const text = body.trim()
+    const text = commentEditor?.plainText.trim()
     if (!draft || !text) return
     setComments((current) => [...current, { ...draft, id: crypto.randomUUID(), body: text }])
     setCommentDraft()
@@ -142,6 +151,15 @@ function App() {
     queueMicrotask(() => highlightDiffRange(diff, anchor, line, COLORS.selection, reset))
   })
 
+  createEffect(() => {
+    const visible = commentsVisible()
+    const ranges = visible ? currentComments() : []
+    const key = `${current()?.file}\0${current()?.patch}\0${view()}\0${wrap()}`
+    const reset = key !== markedDiff
+    markedDiff = key
+    queueMicrotask(() => markDiffComments(diff, ranges, COLORS.comment, reset))
+  })
+
   useKeyboard((key) => {
     const pressed = (bindings: readonly Keybind[]) =>
       bindings.some((binding) => binding.name === key.name && Boolean(binding.ctrl) === key.ctrl)
@@ -152,6 +170,10 @@ function App() {
     }
     if (selectionAnchor() !== undefined && key.name === "escape") {
       setSelectionAnchor()
+      return
+    }
+    if (commentsVisible() && key.name === "escape") {
+      setCommentsVisible(false)
       return
     }
     if (pressed(KEYBINDS.quit)) {
@@ -244,6 +266,9 @@ function App() {
         })
       }
     }
+    if (pressed(KEYBINDS.comments)) {
+      setCommentsVisible((visible) => !visible)
+    }
     if (pressed(KEYBINDS.refresh)) {
       void refresh()
     }
@@ -280,7 +305,7 @@ function App() {
       <box flexDirection="column" width="100%" height="100%" backgroundColor={COLORS.canvas}>
       <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.text}>
-          <b>opendiff</b>  {result().location.directory}  [{session()?.title ?? session()?.id}]  [{mode()}, {view()}, {wrap()}]  [{comments().length} comments]{selectionAnchor() === undefined ? "" : "  [visual]"}
+          <b>opendiff</b>  {result().location.directory}  [{session()?.title ?? session()?.id}]  [{mode()}, {view()}, {wrap()}]  [{comments().length} comments, {commentsVisible() ? "shown" : "hidden"}]{selectionAnchor() === undefined ? "" : "  [visual]"}
         </text>
       </box>
 
@@ -305,50 +330,87 @@ function App() {
               diff = element
               const line = selectedDiffLine()
               highlightDiffRange(diff, selectionAnchor() ?? line, line, COLORS.selection)
+              markDiffComments(diff, commentsVisible() ? currentComments() : [], COLORS.comment)
             }}
           />
         </box>
       )}
 
-      {comments().length > 0 && !commentDraft() ? (
+      <Footer activePane={activePane()} />
+      <Show when={commentDraft()}>
         <box
-          height={Math.min(comments().length + 1, 6)}
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <box
+            width="70%"
+            maxWidth={100}
+            height="50%"
+            maxHeight={20}
+            padding={1}
+            flexDirection="column"
+            borderStyle="single"
+            borderColor={COLORS.comment}
+            backgroundColor={COLORS.panel}
+          >
+            <text fg={COLORS.textStrong}><b>Add review comment</b></text>
+            <text fg={COLORS.textMuted}>
+              {commentDraft()?.file} rows {(commentDraft()?.start ?? 0) + 1}-{(commentDraft()?.end ?? 0) + 1}
+            </text>
+            <textarea
+              ref={(element) => (commentEditor = element)}
+              focused
+              placeholder="Write a review comment"
+              flexGrow={1}
+              wrapMode="word"
+              textColor={COLORS.text}
+              backgroundColor={COLORS.canvas}
+              focusedTextColor={COLORS.text}
+              focusedBackgroundColor={COLORS.canvas}
+              keyBindings={[
+                { name: "return", action: "submit" },
+                { name: "return", shift: true, action: "newline" },
+              ]}
+              onSubmit={addComment}
+            />
+            <text fg={COLORS.textMuted}>enter submit  S-enter newline  esc cancel</text>
+          </box>
+        </box>
+      </Show>
+      <Show when={commentsVisible() && selectedComments().length > 0}>
+        <box
+          position="absolute"
+          top={2}
+          right={1}
+          width="35%"
+          maxWidth={56}
+          height="40%"
+          maxHeight={16}
+          padding={1}
           flexDirection="column"
           borderStyle="single"
-          borderColor={COLORS.border}
+          borderColor={COLORS.comment}
           backgroundColor={COLORS.panel}
         >
-          <text fg={COLORS.textStrong}> Review comments</text>
+          <text fg={COLORS.textStrong}><b>Review comments</b></text>
           <scrollbox flexGrow={1} scrollX={false} scrollY>
-            <For each={comments()}>
+            <For each={selectedComments()}>
               {(comment) => (
-                <text fg={COLORS.text}>
-                  {comment.file}:{comment.start + 1}-{comment.end + 1}  {comment.body}
-                </text>
+                <box flexDirection="column" marginBottom={1}>
+                  <text fg={COLORS.textMuted}>{comment.file}:{comment.start + 1}-{comment.end + 1}</text>
+                  <text fg={COLORS.text}>{comment.body}</text>
+                </box>
               )}
             </For>
           </scrollbox>
+          <text fg={COLORS.textMuted}>esc hide</text>
         </box>
-      ) : null}
-
-      {commentDraft() ? (
-        <box height={3} paddingLeft={1} paddingRight={1} flexDirection="column" backgroundColor={COLORS.panel}>
-          <text fg={COLORS.textMuted}>
-            Comment on {commentDraft()?.file} rows {(commentDraft()?.start ?? 0) + 1}-{(commentDraft()?.end ?? 0) + 1}  [enter submit, esc cancel]
-          </text>
-          <input
-            focused
-            placeholder="Write a review comment"
-            textColor={COLORS.text}
-            backgroundColor={COLORS.canvas}
-            focusedTextColor={COLORS.text}
-            focusedBackgroundColor={COLORS.canvas}
-            onSubmit={addComment}
-          />
-        </box>
-      ) : (
-        <Footer activePane={activePane()} />
-      )}
+      </Show>
       </box>
     </Show>
   )

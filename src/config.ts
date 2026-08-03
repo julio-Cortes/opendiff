@@ -8,6 +8,7 @@ export const COLORS = {
   textStrong: "#ffffff",
   textMuted: "#8b949e",
   selection: "#1f6feb",
+  comment: "#d29922",
   added: "#3fb950",
   removed: "#f85149",
   addedBackground: "#12261e",
@@ -62,6 +63,7 @@ export type Pane = (typeof PANE)[keyof typeof PANE]
 
 export const KEYBINDS = {
   comment: [{ name: "c" }],
+  comments: [{ name: "m" }],
   quit: [{ name: "q" }, { name: "escape" }, { name: "c", ctrl: true }],
   down: [{ name: "j" }, { name: "down" }],
   edit: [{ name: "e" }],
