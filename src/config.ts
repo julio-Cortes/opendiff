@@ -12,6 +12,13 @@ export const COLORS = {
   removed: "#f85149",
   addedBackground: "#12261e",
   removedBackground: "#2d1518",
+  syntaxKeyword: "#ff7b72",
+  syntaxString: "#a5d6ff",
+  syntaxComment: "#8b949e",
+  syntaxNumber: "#79c0ff",
+  syntaxFunction: "#d2a8ff",
+  syntaxType: "#ffa657",
+  syntaxProperty: "#79c0ff",
 } as const
 
 export const LAYOUT = {
