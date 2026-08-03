@@ -5,7 +5,7 @@ import { Service } from "@opencode-ai/client/service"
 import type { DiffRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { render, useKeyboard, useRenderer } from "@opentui/solid"
 import { resolve } from "node:path"
-import { createSignal } from "solid-js"
+import { createEffect, createSignal } from "solid-js"
 import { DiffPane } from "./components/diff-pane"
 import { FileTree } from "./components/file-tree"
 import { Footer } from "./components/footer"
@@ -20,7 +20,7 @@ import {
   type Keybind,
   type Pane,
 } from "./config"
-import { moveToChange, scrollDiff } from "./diff-navigation"
+import { highlightDiffLine, moveDiffSelection, moveToChange, scrollDiff } from "./diff-navigation"
 import { loadSettings, saveSettings } from "./settings"
 
 const endpoint = await Service.ensure()
@@ -42,10 +42,12 @@ function App() {
   let editing = false
   const [result, setResult] = createSignal(initialResult)
   const [selected, setSelected] = createSignal(0)
+  const [selectedDiffLine, setSelectedDiffLine] = createSignal(0)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.files)
   const [view, setView] = createSignal<DiffView>(initialSettings.view)
   const [wrap, setWrap] = createSignal<DiffWrap>(initialSettings.wrap)
   const current = () => result().data[selected()]
+  let highlightedDiff = ""
   const halfPage = () => {
     const height = activePane() === PANE.files ? fileList?.height : diff?.height
     return Math.max(Math.floor((height ?? 2) / 2), 1)
@@ -82,6 +84,14 @@ function App() {
     }
   }
 
+  createEffect(() => {
+    const line = selectedDiffLine()
+    const key = `${current()?.file}\0${current()?.patch}\0${view()}\0${wrap()}`
+    const reset = key !== highlightedDiff
+    highlightedDiff = key
+    queueMicrotask(() => highlightDiffLine(diff, line, COLORS.selection, reset))
+  })
+
   useKeyboard((key) => {
     const pressed = (bindings: readonly Keybind[]) =>
       bindings.some((binding) => binding.name === key.name && Boolean(binding.ctrl) === key.ctrl)
@@ -99,15 +109,17 @@ function App() {
     if (pressed(KEYBINDS.down)) {
       if (activePane() === PANE.files) {
         setSelected((index) => Math.min(index + 1, Math.max(result().data.length - 1, 0)))
+        setSelectedDiffLine(0)
       } else {
-        scrollDiff(diff, 1)
+        setSelectedDiffLine((line) => moveDiffSelection(diff, line, 1))
       }
     }
     if (pressed(KEYBINDS.up)) {
       if (activePane() === PANE.files) {
         setSelected((index) => Math.max(index - 1, 0))
+        setSelectedDiffLine(0)
       } else {
-        scrollDiff(diff, -1)
+        setSelectedDiffLine((line) => moveDiffSelection(diff, line, -1))
       }
     }
     if (pressed(KEYBINDS.pageDown)) {
@@ -173,7 +185,10 @@ function App() {
             file={current()}
             view={view()}
             wrap={wrap()}
-            onReady={(element) => (diff = element)}
+            onReady={(element) => {
+              diff = element
+              highlightDiffLine(diff, selectedDiffLine(), COLORS.selection)
+            }}
           />
         </box>
       )}

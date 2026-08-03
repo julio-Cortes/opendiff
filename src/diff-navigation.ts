@@ -1,5 +1,16 @@
-import { CodeRenderable, type DiffRenderable } from "@opentui/core"
+import { CodeRenderable, LineNumberRenderable, type DiffRenderable, type RGBA } from "@opentui/core"
 import { DIFF_VIEW, type DiffView } from "./config"
+
+type SelectedLine = {
+  line: number
+  colors: Array<{
+    renderable: LineNumberRenderable
+    gutter: RGBA | undefined
+    content: RGBA | undefined
+  }>
+}
+
+const selectedLines = new WeakMap<DiffRenderable, SelectedLine>()
 
 function getCodeRenderables(diff: DiffRenderable | undefined) {
   const pending = diff ? [...diff.getChildren()] : []
@@ -13,6 +24,67 @@ function getCodeRenderables(diff: DiffRenderable | undefined) {
   }
 
   return codeRenderables
+}
+
+function getLineNumberRenderables(diff: DiffRenderable) {
+  const pending = [...diff.getChildren()]
+  const lineNumbers: LineNumberRenderable[] = []
+
+  while (pending.length > 0) {
+    const renderable = pending.pop()
+    if (!renderable) continue
+    if (renderable instanceof LineNumberRenderable) lineNumbers.push(renderable)
+    pending.push(...renderable.getChildren())
+  }
+
+  return lineNumbers
+}
+
+export function moveDiffSelection(diff: DiffRenderable | undefined, line: number, amount: number) {
+  const lineCount = getCodeRenderables(diff)[0]?.lineCount ?? 0
+  return Math.max(0, Math.min(line + amount, Math.max(lineCount - 1, 0)))
+}
+
+export function highlightDiffLine(
+  diff: DiffRenderable | undefined,
+  line: number,
+  color: string,
+  reset = false,
+) {
+  if (!diff) return
+
+  const previous = selectedLines.get(diff)
+  if (previous && !reset) {
+    for (const saved of previous.colors) {
+      if (saved.gutter || saved.content) {
+        saved.renderable.setLineColor(previous.line, {
+          gutter: saved.gutter,
+          content: saved.content,
+        })
+      } else {
+        saved.renderable.clearLineColor(previous.line)
+      }
+    }
+  }
+
+  const colors = getLineNumberRenderables(diff).map((renderable) => {
+    const current = renderable.getLineColors()
+    const saved = {
+      renderable,
+      gutter: current.gutter.get(line),
+      content: current.content.get(line),
+    }
+    renderable.setLineColor(line, { gutter: color, content: color })
+    return saved
+  })
+  selectedLines.set(diff, { line, colors })
+
+  for (const code of getCodeRenderables(diff)) {
+    const visualLine = code.lineInfo.lineSources.findIndex((source) => source === line)
+    if (visualLine < 0 || code.height === 0) continue
+    if (visualLine < code.scrollY) code.scrollY = visualLine
+    if (visualLine >= code.scrollY + code.height) code.scrollY = visualLine - code.height + 1
+  }
 }
 
 export function scrollDiff(diff: DiffRenderable | undefined, amount: number) {
