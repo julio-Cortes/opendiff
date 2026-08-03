@@ -50,7 +50,7 @@ const initialSessions = await client.session.list({
   order: "desc",
 })
 
-type CommentDraft = Omit<ReviewComment, "id" | "body" | "status" | "reply">
+type CommentDraft = Omit<ReviewComment, "id" | "body" | "status" | "replies">
 
 function App() {
   const renderer = useRenderer()
@@ -129,7 +129,13 @@ function App() {
     const text = commentEditor?.plainText.trim()
     if (!draft || !text) return
     setComments((current) => {
-      const next = [...current, { ...draft, id: crypto.randomUUID(), body: text, status: "draft" } satisfies ReviewComment]
+      const next = [...current, {
+        ...draft,
+        id: crypto.randomUUID(),
+        body: text,
+        status: "draft",
+        replies: [],
+      } satisfies ReviewComment]
       void saveReviewComments(draft.repository, draft.sessionID, next)
       return next
     })
@@ -405,7 +411,33 @@ function App() {
               {(comment) => (
                 <box flexDirection="column" marginBottom={1}>
                   <text fg={COLORS.textMuted}>{comment.file}:{comment.start + 1}-{comment.end + 1}</text>
-                  <text fg={COLORS.text}>{comment.body}</text>
+                  <box
+                    flexDirection="column"
+                    border={["left"]}
+                    borderStyle="single"
+                    borderColor={COLORS.comment}
+                    paddingLeft={1}
+                  >
+                    <text fg={COLORS.comment}><b>You</b></text>
+                    <text fg={COLORS.text}>{comment.body}</text>
+                  </box>
+                  <For each={comment.replies}>
+                    {(reply) => (
+                      <box
+                        flexDirection="column"
+                        border={["left"]}
+                        borderStyle="single"
+                        borderColor={reply.role === "assistant" ? COLORS.syntaxProperty : COLORS.comment}
+                        paddingLeft={1}
+                        marginTop={1}
+                      >
+                        <text fg={reply.role === "assistant" ? COLORS.syntaxProperty : COLORS.comment}>
+                          <b>{reply.role === "assistant" ? "Agent" : "You"}</b>
+                        </text>
+                        <text fg={COLORS.text}>{reply.body}</text>
+                      </box>
+                    )}
+                  </For>
                 </box>
               )}
             </For>

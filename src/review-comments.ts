@@ -2,6 +2,12 @@ import { mkdir } from "node:fs/promises"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 
+export type ReviewReply = {
+  id: string
+  body: string
+  role: "user" | "assistant"
+}
+
 export type ReviewComment = {
   id: string
   repository: string
@@ -12,7 +18,7 @@ export type ReviewComment = {
   end: number
   body: string
   status: "draft" | "submitted" | "answered"
-  reply?: string
+  replies: ReviewReply[]
 }
 
 const commentsPath = join(
@@ -29,7 +35,9 @@ async function loadAllComments() {
 
 export async function loadReviewComments(repository: string, sessionID: string) {
   const comments = await loadAllComments()
-  return comments.filter((comment) => comment.repository === repository && comment.sessionID === sessionID)
+  return comments
+    .filter((comment) => comment.repository === repository && comment.sessionID === sessionID)
+    .map((comment) => ({ ...comment, replies: comment.replies ?? [] }))
 }
 
 export async function saveReviewComments(repository: string, sessionID: string, comments: ReviewComment[]) {
