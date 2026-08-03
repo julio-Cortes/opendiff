@@ -68,6 +68,8 @@ function App() {
   const [editingComment, setEditingComment] = createSignal<ReviewComment>()
   const [comments, setComments] = createSignal<ReviewComment[]>([])
   const [commentsVisible, setCommentsVisible] = createSignal(false)
+  const [commentListVisible, setCommentListVisible] = createSignal(false)
+  const [commentListIndex, setCommentListIndex] = createSignal(0)
   const [submittingComments, setSubmittingComments] = createSignal(false)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
@@ -231,6 +233,18 @@ function App() {
       }
       return
     }
+    if (commentListVisible()) {
+      if (key.name === "escape" || pressed(KEYBINDS.listComments)) setCommentListVisible(false)
+      if (pressed(KEYBINDS.down)) {
+        setCommentListIndex((index) => Math.min(index + 1, Math.max(comments().length - 1, 0)))
+      }
+      if (pressed(KEYBINDS.up)) setCommentListIndex((index) => Math.max(index - 1, 0))
+      if (pressed(KEYBINDS.editComment)) {
+        const editable = comments()[commentListIndex()]
+        if (editable?.status === "draft") setEditingComment(editable)
+      }
+      return
+    }
     if (selectionAnchor() !== undefined && key.name === "escape") {
       setSelectionAnchor()
       return
@@ -332,6 +346,10 @@ function App() {
     }
     if (pressed(KEYBINDS.comments)) {
       setCommentsVisible((visible) => !visible)
+    }
+    if (pressed(KEYBINDS.listComments)) {
+      setCommentListIndex((index) => Math.min(index, Math.max(comments().length - 1, 0)))
+      setCommentListVisible(true)
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.editComment)) {
       const editable = selectedComments().find((comment) => comment.status === "draft")
@@ -454,7 +472,46 @@ function App() {
           </box>
         </box>
       </Show>
-      <Show when={commentsVisible() && selectedComments().length > 0}>
+      <Show when={commentListVisible()}>
+        <box
+          position="absolute"
+          top={1}
+          right={0}
+          bottom={1}
+          width="50%"
+          maxWidth={80}
+          padding={1}
+          flexDirection="column"
+          borderStyle="single"
+          borderColor={COLORS.selection}
+          backgroundColor={COLORS.panel}
+        >
+          <text fg={COLORS.textStrong}><b>All review comments</b></text>
+          <text fg={COLORS.textMuted}>{comments().length} comments  j/k select  i edit draft  esc close</text>
+          <scrollbox flexGrow={1} scrollX={false} scrollY>
+            <Show when={comments().length > 0} fallback={<text fg={COLORS.textMuted}>No review comments</text>}>
+              <For each={comments()}>
+                {(comment, index) => (
+                  <box
+                    flexDirection="column"
+                    paddingLeft={1}
+                    paddingRight={1}
+                    marginTop={1}
+                    backgroundColor={index() === commentListIndex() ? COLORS.selection : COLORS.canvas}
+                  >
+                    <text fg={COLORS.textMuted}>{comment.file}:{comment.start + 1}-{comment.end + 1}  [{comment.status}]</text>
+                    <text fg={COLORS.text}>{comment.body}</text>
+                    <Show when={comment.replies.length > 0}>
+                      <text fg={COLORS.syntaxProperty}>{comment.replies.length} replies</text>
+                    </Show>
+                  </box>
+                )}
+              </For>
+            </Show>
+          </scrollbox>
+        </box>
+      </Show>
+      <Show when={!commentListVisible() && commentsVisible() && selectedComments().length > 0}>
         <box
           position="absolute"
           top={2}
