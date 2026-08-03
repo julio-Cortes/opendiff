@@ -45,6 +45,20 @@ export function moveDiffSelection(diff: DiffRenderable | undefined, line: number
   return Math.max(0, Math.min(line + amount, Math.max(lineCount - 1, 0)))
 }
 
+export function moveDiffSelectionByVisualRows(
+  diff: DiffRenderable | undefined,
+  line: number,
+  amount: number,
+) {
+  const sources = getCodeRenderables(diff)[0]?.lineInfo.lineSources ?? []
+  const visualLine = amount < 0
+    ? sources.findLastIndex((source) => source === line)
+    : sources.findIndex((source) => source === line)
+  if (visualLine < 0) return moveDiffSelection(diff, line, amount)
+  const target = Math.max(0, Math.min(visualLine + amount, Math.max(sources.length - 1, 0)))
+  return sources[target] ?? line
+}
+
 export function highlightDiffRange(
   diff: DiffRenderable | undefined,
   start: number,
@@ -137,10 +151,6 @@ export function getDiffLineNumber(
       row++
     }
   }
-}
-
-export function scrollDiff(diff: DiffRenderable | undefined, amount: number) {
-  for (const code of getCodeRenderables(diff)) code.scrollY += amount
 }
 
 function getChangeOffsets(patch: string, view: DiffView) {

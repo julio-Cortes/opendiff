@@ -27,8 +27,8 @@ import {
   getDiffLineNumber,
   highlightDiffRange,
   moveDiffSelection,
+  moveDiffSelectionByVisualRows,
   moveToChange,
-  scrollDiff,
 } from "./diff-navigation"
 import { loadSettings, saveSettings } from "./settings"
 
@@ -178,8 +178,7 @@ function App() {
         setSelectedDiffLine(0)
         setSelectionAnchor()
       } else {
-        scrollDiff(diff, halfPage())
-        setSelectedDiffLine((line) => moveDiffSelection(diff, line, halfPage()))
+        setSelectedDiffLine((line) => moveDiffSelectionByVisualRows(diff, line, halfPage()))
       }
     }
     if (pressed(KEYBINDS.pageUp)) {
@@ -188,8 +187,7 @@ function App() {
         setSelectedDiffLine(0)
         setSelectionAnchor()
       } else {
-        scrollDiff(diff, -halfPage())
-        setSelectedDiffLine((line) => moveDiffSelection(diff, line, -halfPage()))
+        setSelectedDiffLine((line) => moveDiffSelectionByVisualRows(diff, line, -halfPage()))
       }
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.nextChange)) {
