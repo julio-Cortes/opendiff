@@ -6,6 +6,7 @@
       "name": "opendiff",
       "dependencies": {
         "@opencode-ai/client": "0.0.0-next-16694",
+        "@opentui/core": "0.4.5",
         "@opentui/solid": "0.4.5",
         "solid-js": "1.9.12",
       },
