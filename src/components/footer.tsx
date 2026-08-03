@@ -8,7 +8,7 @@ export function Footer(props: FooterProps) {
   return (
     <box height={1} paddingLeft={1} backgroundColor={COLORS.panel}>
       <text fg={COLORS.textMuted}>
-        {formatKeybind(KEYBINDS.switchPane[0])} pane [{props.activePane}]  {formatKeybind(KEYBINDS.down[0])}/{formatKeybind(KEYBINDS.up[0])} navigate  {formatKeybind(KEYBINDS.visual[0])} select  {formatKeybind(KEYBINDS.pageDown[0])}/{formatKeybind(KEYBINDS.pageUp[0])} page  {formatKeybind(KEYBINDS.previousChange[0])}/{formatKeybind(KEYBINDS.nextChange[0])} change  {formatKeybind(KEYBINDS.edit[0])} edit  {formatKeybind(KEYBINDS.toggleMode[0])} mode  {formatKeybind(KEYBINDS.toggleView[0])} view  {formatKeybind(KEYBINDS.toggleWrap[0])} wrap  {formatKeybind(KEYBINDS.refresh[0])} refresh  {formatKeybind(KEYBINDS.quit[0])} quit
+        {formatKeybind(KEYBINDS.switchPane[0])} pane [{props.activePane}]  {formatKeybind(KEYBINDS.down[0])}/{formatKeybind(KEYBINDS.up[0])} navigate  {formatKeybind(KEYBINDS.visual[0])} select  {formatKeybind(KEYBINDS.comment[0])} comment  {formatKeybind(KEYBINDS.pageDown[0])}/{formatKeybind(KEYBINDS.pageUp[0])} page  {formatKeybind(KEYBINDS.previousChange[0])}/{formatKeybind(KEYBINDS.nextChange[0])} change  {formatKeybind(KEYBINDS.edit[0])} edit  {formatKeybind(KEYBINDS.toggleMode[0])} mode  {formatKeybind(KEYBINDS.toggleView[0])} view  {formatKeybind(KEYBINDS.toggleWrap[0])} wrap  {formatKeybind(KEYBINDS.refresh[0])} refresh  {formatKeybind(KEYBINDS.quit[0])} quit
       </text>
     </box>
   )
