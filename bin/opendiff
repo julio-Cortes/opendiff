@@ -11,4 +11,7 @@ while [ -h "$source" ]; do
 done
 
 root=$(CDPATH= cd -P -- "$(dirname -- "$source")/.." && pwd)
-exec bun run --config "$root/bunfig.toml" --tsconfig-override "$root/tsconfig.json" "$root/src/index.tsx" "$@"
+exec bun run \
+  --preload "$root/node_modules/@opentui/solid/scripts/preload.js" \
+  --tsconfig-override "$root/tsconfig.json" \
+  "$root/src/index.tsx" "$@"
