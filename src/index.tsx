@@ -20,6 +20,7 @@ import {
   type Pane,
 } from "./config"
 import { moveToChange, scrollDiff } from "./diff-navigation"
+import { loadSettings, saveSettings } from "./settings"
 
 const endpoint = await Service.ensure()
 const client = OpenCode.make({
@@ -31,6 +32,7 @@ const loadDiff = () => client.vcs.diff({
   mode: "working",
 })
 const initialResult = await loadDiff()
+const initialSettings = await loadSettings()
 
 function App() {
   const renderer = useRenderer()
@@ -39,8 +41,8 @@ function App() {
   const [result, setResult] = createSignal(initialResult)
   const [selected, setSelected] = createSignal(0)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.files)
-  const [view, setView] = createSignal<DiffView>(DIFF_VIEW.unified)
-  const [wrap, setWrap] = createSignal<DiffWrap>(DIFF_WRAP.none)
+  const [view, setView] = createSignal<DiffView>(initialSettings.view)
+  const [wrap, setWrap] = createSignal<DiffWrap>(initialSettings.wrap)
   const current = () => result().data[selected()]
   const halfPage = () => {
     const height = activePane() === PANE.files ? fileList?.height : diff?.height
@@ -109,10 +111,14 @@ function App() {
       void refresh()
     }
     if (pressed(KEYBINDS.toggleView)) {
-      setView((currentView) => currentView === DIFF_VIEW.unified ? DIFF_VIEW.split : DIFF_VIEW.unified)
+      const nextView = view() === DIFF_VIEW.unified ? DIFF_VIEW.split : DIFF_VIEW.unified
+      setView(nextView)
+      void saveSettings({ view: nextView, wrap: wrap() })
     }
     if (pressed(KEYBINDS.toggleWrap)) {
-      setWrap((currentWrap) => currentWrap === DIFF_WRAP.none ? DIFF_WRAP.word : DIFF_WRAP.none)
+      const nextWrap = wrap() === DIFF_WRAP.none ? DIFF_WRAP.word : DIFF_WRAP.none
+      setWrap(nextWrap)
+      void saveSettings({ view: view(), wrap: nextWrap })
     }
   })
 
