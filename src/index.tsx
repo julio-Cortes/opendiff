@@ -11,10 +11,12 @@ import { FileTree } from "./components/file-tree"
 import { Footer } from "./components/footer"
 import {
   COLORS,
+  DIFF_MODE,
   DIFF_VIEW,
   DIFF_WRAP,
   KEYBINDS,
   PANE,
+  type DiffMode,
   type DiffView,
   type DiffWrap,
   type Keybind,
@@ -34,11 +36,11 @@ const client = OpenCode.make({
   baseUrl: endpoint.url,
   headers: Service.headers(endpoint),
 })
-const loadDiff = () => client.vcs.diff({
+const loadDiff = (mode: DiffMode) => client.vcs.diff({
   location: { directory: process.cwd() },
-  mode: "working",
+  mode,
 })
-const initialResult = await loadDiff()
+const initialResult = await loadDiff(DIFF_MODE.working)
 const initialSettings = await loadSettings()
 
 function App() {
@@ -50,6 +52,7 @@ function App() {
   const [selected, setSelected] = createSignal(0)
   const [selectedDiffLine, setSelectedDiffLine] = createSignal(0)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
+  const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
   const [view, setView] = createSignal<DiffView>(initialSettings.view)
   const [wrap, setWrap] = createSignal<DiffWrap>(initialSettings.wrap)
   const current = () => result().data[selected()]
@@ -59,14 +62,16 @@ function App() {
     return Math.max(Math.floor((height ?? 2) / 2), 1)
   }
 
-  const refresh = async () => {
+  const refresh = async (nextMode = mode()) => {
     const selectedFile = current()?.file
-    const next = await loadDiff()
+    const next = await loadDiff(nextMode)
     const matchingIndex = next.data.findIndex((file) => file.file === selectedFile)
     const nextSelected = matchingIndex >= 0 ? matchingIndex : Math.min(selected(), Math.max(next.data.length - 1, 0))
 
     setResult(next)
     setSelected(nextSelected)
+    if (nextMode !== mode()) setSelectedDiffLine(0)
+    setMode(nextMode)
   }
 
   const edit = async () => {
@@ -160,6 +165,9 @@ function App() {
     if (pressed(KEYBINDS.refresh)) {
       void refresh()
     }
+    if (pressed(KEYBINDS.toggleMode)) {
+      void refresh(mode() === DIFF_MODE.working ? DIFF_MODE.branch : DIFF_MODE.working)
+    }
     if (pressed(KEYBINDS.edit)) {
       void edit()
     }
@@ -179,13 +187,13 @@ function App() {
     <box flexDirection="column" width="100%" height="100%" backgroundColor={COLORS.canvas}>
       <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.text}>
-          <b>opendiff</b>  {result().location.directory}  [{view()}, {wrap()}]
+          <b>opendiff</b>  {result().location.directory}  [{mode()}, {view()}, {wrap()}]
         </text>
       </box>
 
       {result().data.length === 0 ? (
         <box flexGrow={1} alignItems="center" justifyContent="center">
-          <text fg={COLORS.textMuted}>No working-copy changes</text>
+          <text fg={COLORS.textMuted}>No {mode()} changes</text>
         </box>
       ) : (
         <box flexDirection="row" flexGrow={1}>

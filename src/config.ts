@@ -39,6 +39,13 @@ export const DIFF_VIEW = {
 
 export type DiffView = (typeof DIFF_VIEW)[keyof typeof DIFF_VIEW]
 
+export const DIFF_MODE = {
+  working: "working",
+  branch: "branch",
+} as const
+
+export type DiffMode = (typeof DIFF_MODE)[keyof typeof DIFF_MODE]
+
 export const DIFF_WRAP = {
   none: "none",
   word: "word",
@@ -64,6 +71,7 @@ export const KEYBINDS = {
   up: [{ name: "k" }, { name: "up" }],
   refresh: [{ name: "r" }],
   switchPane: [{ name: "tab" }],
+  toggleMode: [{ name: "b" }],
   toggleView: [{ name: "v" }],
   toggleWrap: [{ name: "w" }],
 } as const satisfies Record<string, readonly Keybind[]>
