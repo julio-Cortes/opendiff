@@ -1,0 +1,14 @@
+#!/bin/sh
+
+source=$0
+while [ -h "$source" ]; do
+  directory=$(CDPATH= cd -P -- "$(dirname -- "$source")" && pwd)
+  source=$(readlink "$source")
+  case $source in
+    /*) ;;
+    *) source=$directory/$source ;;
+  esac
+done
+
+root=$(CDPATH= cd -P -- "$(dirname -- "$source")/.." && pwd)
+exec bun run --config "$root/bunfig.toml" --tsconfig-override "$root/tsconfig.json" "$root/src/index.tsx" "$@"
