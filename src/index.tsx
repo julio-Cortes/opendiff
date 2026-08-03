@@ -4,6 +4,7 @@ import { OpenCode } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/service"
 import type { DiffRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { render, useKeyboard, useRenderer } from "@opentui/solid"
+import { resolve } from "node:path"
 import { createSignal } from "solid-js"
 import { DiffPane } from "./components/diff-pane"
 import { FileTree } from "./components/file-tree"
@@ -38,6 +39,7 @@ function App() {
   const renderer = useRenderer()
   let fileList: ScrollBoxRenderable | undefined
   let diff: DiffRenderable | undefined
+  let editing = false
   const [result, setResult] = createSignal(initialResult)
   const [selected, setSelected] = createSignal(0)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.files)
@@ -57,6 +59,27 @@ function App() {
 
     setResult(next)
     setSelected(nextSelected)
+  }
+
+  const edit = async () => {
+    const file = current()?.file
+    if (!file || editing) return
+
+    editing = true
+    renderer.suspend()
+    try {
+      const editor = process.env.VISUAL || process.env.EDITOR || "vi"
+      const child = Bun.spawn([editor, resolve(result().location.directory, file)], {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      })
+      await child.exited
+    } finally {
+      renderer.resume()
+      editing = false
+      await refresh()
+    }
   }
 
   useKeyboard((key) => {
@@ -109,6 +132,9 @@ function App() {
     }
     if (pressed(KEYBINDS.refresh)) {
       void refresh()
+    }
+    if (pressed(KEYBINDS.edit)) {
+      void edit()
     }
     if (pressed(KEYBINDS.toggleView)) {
       const nextView = view() === DIFF_VIEW.unified ? DIFF_VIEW.split : DIFF_VIEW.unified

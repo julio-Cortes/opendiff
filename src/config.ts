@@ -56,6 +56,7 @@ export type Pane = (typeof PANE)[keyof typeof PANE]
 export const KEYBINDS = {
   quit: [{ name: "q" }, { name: "escape" }, { name: "c", ctrl: true }],
   down: [{ name: "j" }, { name: "down" }],
+  edit: [{ name: "e" }],
   nextChange: [{ name: "]" }],
   pageDown: [{ name: "d", ctrl: true }],
   pageUp: [{ name: "u", ctrl: true }],
