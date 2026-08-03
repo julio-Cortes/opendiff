@@ -67,6 +67,7 @@ function App() {
   const [commentDraft, setCommentDraft] = createSignal<CommentDraft>()
   const [comments, setComments] = createSignal<ReviewComment[]>([])
   const [commentsVisible, setCommentsVisible] = createSignal(false)
+  const [submittingComments, setSubmittingComments] = createSignal(false)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
   const [view, setView] = createSignal<DiffView>(initialSettings.view)
@@ -147,6 +148,46 @@ function App() {
     const repository = result().location.directory
     setComments(await loadReviewComments(repository, selectedSession.id))
     setSession(selectedSession)
+  }
+
+  const submitComments = async () => {
+    const selectedSession = session()
+    const drafts = comments().filter((comment) => comment.status === "draft")
+    if (!selectedSession || drafts.length === 0 || submittingComments()) return
+
+    setSubmittingComments(true)
+    const submitted = comments().map((comment) =>
+      comment.status === "draft" ? { ...comment, status: "submitted" as const } : comment
+    )
+    setComments(submitted)
+    await saveReviewComments(result().location.directory, selectedSession.id, submitted)
+
+    const prompt = `Address these diff review comments. Each comment has a stable ID. Make the requested code changes, then respond with only JSON in the form {"replies":[{"id":"comment-id","body":"summary of what you did"}]} using one reply for every comment.\n\n${drafts.map((comment) => `COMMENT ${comment.id}\nFile: ${comment.file}\nDiff rows: ${comment.start + 1}-${comment.end + 1}\nComment: ${comment.body}\nPatch:\n${comment.patch}`).join("\n\n")}`
+    const pending = await client.session.prompt({ sessionID: selectedSession.id, text: prompt })
+    await client.session.wait({ sessionID: selectedSession.id })
+    const messages = await client.message.list({ sessionID: selectedSession.id, order: "desc", limit: 20 })
+    const response = messages.data.find((message) =>
+      message.type === "assistant" && message.time.created >= pending.timeCreated
+    )
+    const text = response?.type === "assistant"
+      ? response.content.filter((part) => part.type === "text").map((part) => part.text).join("")
+      : ""
+    const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].at(-1)?.[1]
+    const parsed = JSON.parse(fenced ?? text) as { replies: Array<{ id: string; body: string }> }
+    const replies = new Map(parsed.replies.map((reply) => [reply.id, reply.body]))
+    const answered = submitted.map((comment) => {
+      const body = replies.get(comment.id)
+      if (!body) return comment
+      return {
+        ...comment,
+        status: "answered" as const,
+        replies: [...comment.replies, { id: crypto.randomUUID(), body, role: "assistant" as const }],
+      }
+    })
+    setComments(answered)
+    await saveReviewComments(result().location.directory, selectedSession.id, answered)
+    setSubmittingComments(false)
+    await refresh()
   }
 
   createEffect(() => {
@@ -277,6 +318,9 @@ function App() {
     if (pressed(KEYBINDS.comments)) {
       setCommentsVisible((visible) => !visible)
     }
+    if (pressed(KEYBINDS.sendComments)) {
+      void submitComments()
+    }
     if (pressed(KEYBINDS.refresh)) {
       void refresh()
     }
@@ -313,7 +357,7 @@ function App() {
       <box flexDirection="column" width="100%" height="100%" backgroundColor={COLORS.canvas}>
       <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.text}>
-          <b>opendiff</b>  {result().location.directory}  [{session()?.title ?? session()?.id}]  [{mode()}, {view()}, {wrap()}]  [{comments().length} comments, {commentsVisible() ? "shown" : "hidden"}]{selectionAnchor() === undefined ? "" : "  [visual]"}
+          <b>opendiff</b>  {result().location.directory}  [{session()?.title ?? session()?.id}]  [{mode()}, {view()}, {wrap()}]  [{comments().length} comments, {commentsVisible() ? "shown" : "hidden"}]{submittingComments() ? "  [sending]" : ""}{selectionAnchor() === undefined ? "" : "  [visual]"}
         </text>
       </box>
 
