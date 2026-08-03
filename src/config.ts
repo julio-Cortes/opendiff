@@ -70,9 +70,10 @@ export const KEYBINDS = {
   previousChange: [{ name: "[" }],
   up: [{ name: "k" }, { name: "up" }],
   refresh: [{ name: "r" }],
+  select: [{ name: "return" }],
   switchPane: [{ name: "tab" }],
   toggleMode: [{ name: "b" }],
-  toggleView: [{ name: "v" }],
+  toggleView: [{ name: "s" }],
   toggleWrap: [{ name: "w" }],
 } as const satisfies Record<string, readonly Keybind[]>
 

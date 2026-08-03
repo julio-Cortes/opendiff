@@ -5,10 +5,11 @@ import { Service } from "@opencode-ai/client/service"
 import type { DiffRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { render, useKeyboard, useRenderer } from "@opentui/solid"
 import { basename, resolve } from "node:path"
-import { createEffect, createSignal } from "solid-js"
+import { createEffect, createSignal, Show } from "solid-js"
 import { DiffPane } from "./components/diff-pane"
 import { FileTree } from "./components/file-tree"
 import { Footer } from "./components/footer"
+import { SessionPicker } from "./components/session-picker"
 import {
   COLORS,
   DIFF_MODE,
@@ -42,6 +43,10 @@ const loadDiff = (mode: DiffMode) => client.vcs.diff({
 })
 const initialResult = await loadDiff(DIFF_MODE.working)
 const initialSettings = await loadSettings()
+const initialSessions = await client.session.list({
+  directory: process.cwd(),
+  order: "desc",
+})
 
 function App() {
   const renderer = useRenderer()
@@ -49,6 +54,8 @@ function App() {
   let diff: DiffRenderable | undefined
   let editing = false
   const [result, setResult] = createSignal(initialResult)
+  const [sessionIndex, setSessionIndex] = createSignal(0)
+  const [session, setSession] = createSignal<(typeof initialSessions.data)[number]>()
   const [selected, setSelected] = createSignal(0)
   const [selectedDiffLine, setSelectedDiffLine] = createSignal(0)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
@@ -114,6 +121,19 @@ function App() {
 
     if (pressed(KEYBINDS.quit)) {
       renderer.destroy()
+      return
+    }
+    if (!session()) {
+      if (pressed(KEYBINDS.down)) {
+        setSessionIndex((index) => Math.min(index + 1, Math.max(initialSessions.data.length - 1, 0)))
+      }
+      if (pressed(KEYBINDS.up)) {
+        setSessionIndex((index) => Math.max(index - 1, 0))
+      }
+      if (pressed(KEYBINDS.select)) {
+        const selectedSession = initialSessions.data[sessionIndex()]
+        if (selectedSession) setSession(selectedSession)
+      }
       return
     }
     if (pressed(KEYBINDS.switchPane)) {
@@ -184,10 +204,20 @@ function App() {
   })
 
   return (
-    <box flexDirection="column" width="100%" height="100%" backgroundColor={COLORS.canvas}>
+    <Show
+      when={session()}
+      fallback={
+        <SessionPicker
+          directory={process.cwd()}
+          sessions={initialSessions.data}
+          selected={sessionIndex()}
+        />
+      }
+    >
+      <box flexDirection="column" width="100%" height="100%" backgroundColor={COLORS.canvas}>
       <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.text}>
-          <b>opendiff</b>  {result().location.directory}  [{mode()}, {view()}, {wrap()}]
+          <b>opendiff</b>  {result().location.directory}  [{session()?.title ?? session()?.id}]  [{mode()}, {view()}, {wrap()}]
         </text>
       </box>
 
@@ -217,7 +247,8 @@ function App() {
       )}
 
       <Footer activePane={activePane()} />
-    </box>
+      </box>
+    </Show>
   )
 }
 
