@@ -28,6 +28,7 @@ const KEYBINDS = {
   quit: [{ name: "q" }, { name: "escape" }, { name: "c", ctrl: true }],
   nextFile: [{ name: "j" }, { name: "down" }],
   previousFile: [{ name: "k" }, { name: "up" }],
+  refresh: [{ name: "r" }],
 } as const satisfies Record<string, readonly Keybind[]>
 
 const FILE_STATUS = {
@@ -41,15 +42,27 @@ const client = OpenCode.make({
   baseUrl: endpoint.url,
   headers: Service.headers(endpoint),
 })
-const result = await client.vcs.diff({
+const loadDiff = () => client.vcs.diff({
   location: { directory: process.cwd() },
   mode: "working",
 })
+const initialResult = await loadDiff()
 
 function App() {
   const renderer = useRenderer()
+  const [result, setResult] = createSignal(initialResult)
   const [selected, setSelected] = createSignal(0)
-  const current = () => result.data[selected()]
+  const current = () => result().data[selected()]
+
+  const refresh = async () => {
+    const selectedFile = current()?.file
+    const next = await loadDiff()
+    const matchingIndex = next.data.findIndex((file) => file.file === selectedFile)
+    const nextSelected = matchingIndex >= 0 ? matchingIndex : Math.min(selected(), Math.max(next.data.length - 1, 0))
+
+    setResult(next)
+    setSelected(nextSelected)
+  }
 
   useKeyboard((key) => {
     const pressed = (bindings: readonly Keybind[]) =>
@@ -60,10 +73,13 @@ function App() {
       return
     }
     if (pressed(KEYBINDS.nextFile)) {
-      setSelected((index) => Math.min(index + 1, result.data.length - 1))
+      setSelected((index) => Math.min(index + 1, Math.max(result().data.length - 1, 0)))
     }
     if (pressed(KEYBINDS.previousFile)) {
       setSelected((index) => Math.max(index - 1, 0))
+    }
+    if (pressed(KEYBINDS.refresh)) {
+      void refresh()
     }
   })
 
@@ -71,18 +87,18 @@ function App() {
     <box flexDirection="column" width="100%" height="100%" backgroundColor={COLORS.canvas}>
       <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.text}>
-          <b>opendiff</b>  {result.location.directory}
+          <b>opendiff</b>  {result().location.directory}
         </text>
       </box>
 
-      {result.data.length === 0 ? (
+      {result().data.length === 0 ? (
         <box flexGrow={1} alignItems="center" justifyContent="center">
           <text fg={COLORS.textMuted}>No working-copy changes</text>
         </box>
       ) : (
         <box flexDirection="row" flexGrow={1}>
           <box width={32} flexDirection="column" borderStyle="single" borderColor={COLORS.border}>
-            <For each={result.data}>
+            <For each={result().data}>
               {(file, index) => (
                 <text
                   fg={selected() === index() ? COLORS.textStrong : COLORS.textMuted}
@@ -117,7 +133,7 @@ function App() {
 
       <box height={1} paddingLeft={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.textMuted}>
-          {KEYBINDS.nextFile[0].name}/{KEYBINDS.previousFile[0].name} select  {KEYBINDS.quit[0].name} quit
+          {KEYBINDS.nextFile[0].name}/{KEYBINDS.previousFile[0].name} select  {KEYBINDS.refresh[0].name} refresh  {KEYBINDS.quit[0].name} quit
         </text>
       </box>
     </box>
