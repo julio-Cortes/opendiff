@@ -4,7 +4,7 @@ import { OpenCode } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/service"
 import type { DiffRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { render, useKeyboard, useRenderer } from "@opentui/solid"
-import { resolve } from "node:path"
+import { basename, resolve } from "node:path"
 import { createEffect, createSignal } from "solid-js"
 import { DiffPane } from "./components/diff-pane"
 import { FileTree } from "./components/file-tree"
@@ -20,7 +20,13 @@ import {
   type Keybind,
   type Pane,
 } from "./config"
-import { highlightDiffLine, moveDiffSelection, moveToChange, scrollDiff } from "./diff-navigation"
+import {
+  getDiffLineNumber,
+  highlightDiffLine,
+  moveDiffSelection,
+  moveToChange,
+  scrollDiff,
+} from "./diff-navigation"
 import { loadSettings, saveSettings } from "./settings"
 
 const endpoint = await Service.ensure()
@@ -71,7 +77,12 @@ function App() {
     renderer.suspend()
     try {
       const editor = process.env.VISUAL || process.env.EDITOR || "vi"
-      const child = Bun.spawn([editor, resolve(result().location.directory, file)], {
+      const path = resolve(result().location.directory, file)
+      const line = getDiffLineNumber(diff, current()?.patch ?? "", view(), selectedDiffLine())
+      const command = [editor]
+      if (["vi", "vim", "nvim"].includes(basename(editor)) && line !== undefined) command.push(`+${line}`)
+      command.push(path)
+      const child = Bun.spawn(command, {
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",

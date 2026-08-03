@@ -27,14 +27,14 @@ function getCodeRenderables(diff: DiffRenderable | undefined) {
 }
 
 function getLineNumberRenderables(diff: DiffRenderable) {
-  const pending = [...diff.getChildren()]
+  const pending = [...diff.getChildren()].reverse()
   const lineNumbers: LineNumberRenderable[] = []
 
   while (pending.length > 0) {
     const renderable = pending.pop()
     if (!renderable) continue
     if (renderable instanceof LineNumberRenderable) lineNumbers.push(renderable)
-    pending.push(...renderable.getChildren())
+    pending.push(...renderable.getChildren().reverse())
   }
 
   return lineNumbers
@@ -84,6 +84,49 @@ export function highlightDiffLine(
     if (visualLine < 0 || code.height === 0) continue
     if (visualLine < code.scrollY) code.scrollY = visualLine
     if (visualLine >= code.scrollY + code.height) code.scrollY = visualLine - code.height + 1
+  }
+}
+
+export function getDiffLineNumber(
+  diff: DiffRenderable | undefined,
+  patch: string,
+  view: DiffView,
+  selectedLine: number,
+) {
+  if (diff && view === DIFF_VIEW.split) {
+    const rightSide = getLineNumberRenderables(diff).at(-1)
+    const lineNumbers = [...(rightSide?.getLineNumbers() ?? new Map<number, number>())]
+    const exact = lineNumbers.find(([line]) => line === selectedLine)
+    if (exact) return exact[1]
+    const next = lineNumbers.find(([line]) => line > selectedLine)
+    if (next) return next[1]
+    const previous = lineNumbers.findLast(([line]) => line < selectedLine)
+    return previous ? previous[1] + 1 : 1
+  }
+
+  const hunks: Array<{ newStart: number; lines: string[] }> = []
+
+  for (const line of patch.split("\n")) {
+    const header = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
+    if (header) {
+      hunks.push({ newStart: Number(header[1]), lines: [] })
+      continue
+    }
+    if (hunks.length > 0 && /^[ +\-\\]/.test(line)) hunks.at(-1)?.lines.push(line)
+  }
+
+  let row = 0
+
+  for (const hunk of hunks) {
+    let newLine = hunk.newStart
+
+    for (const line of hunk.lines) {
+      const marker = line[0]
+      if (marker === "\\") continue
+      if (row === selectedLine) return Math.max(newLine, 1)
+      if (marker !== "-") newLine++
+      row++
+    }
   }
 }
 
