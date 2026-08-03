@@ -1,0 +1,22 @@
+{
+  "name": "opendiff",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "opendiff": "./src/index.tsx"
+  },
+  "scripts": {
+    "start": "bun src/index.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/client": "0.0.0-next-16694",
+    "@opentui/solid": "0.4.5",
+    "solid-js": "1.9.12"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "typescript": "5.9.3"
+  }
+}
