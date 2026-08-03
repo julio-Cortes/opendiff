@@ -150,6 +150,10 @@ function App() {
       setActivePane((pane) => pane === PANE.files ? PANE.diff : PANE.files)
       return
     }
+    if (activePane() === PANE.files && pressed(KEYBINDS.select)) {
+      setActivePane(PANE.diff)
+      return
+    }
     if (pressed(KEYBINDS.down)) {
       if (activePane() === PANE.files) {
         setSelected((index) => Math.min(index + 1, Math.max(result().data.length - 1, 0)))
