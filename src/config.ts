@@ -32,6 +32,13 @@ export const DIFF_VIEW = {
 
 export type DiffView = (typeof DIFF_VIEW)[keyof typeof DIFF_VIEW]
 
+export const DIFF_WRAP = {
+  none: "none",
+  word: "word",
+} as const
+
+export type DiffWrap = (typeof DIFF_WRAP)[keyof typeof DIFF_WRAP]
+
 export const PANE = {
   files: "files",
   diff: "diff",
@@ -50,6 +57,7 @@ export const KEYBINDS = {
   refresh: [{ name: "r" }],
   switchPane: [{ name: "tab" }],
   toggleView: [{ name: "v" }],
+  toggleWrap: [{ name: "w" }],
 } as const satisfies Record<string, readonly Keybind[]>
 
 export const FILE_STATUS = {

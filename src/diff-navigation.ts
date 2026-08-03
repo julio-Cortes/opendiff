@@ -71,7 +71,11 @@ export function moveToChange(
   if (!diff) return
   const codeRenderables = getCodeRenderables(diff)
   const scrollTop = codeRenderables[0]?.scrollY ?? 0
-  const offsets = getChangeOffsets(patch, view)
+  const lineSources = codeRenderables[0]?.lineInfo.lineSources ?? []
+  const offsets = getChangeOffsets(patch, view).map((offset) => {
+    const visualRow = lineSources.findIndex((source) => source >= offset)
+    return visualRow >= 0 ? visualRow : offset
+  })
   const target = direction === 1
     ? offsets.find((offset) => offset > scrollTop)
     : offsets.findLast((offset) => offset < scrollTop)

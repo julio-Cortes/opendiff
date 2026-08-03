@@ -8,7 +8,17 @@ import { createSignal } from "solid-js"
 import { DiffPane } from "./components/diff-pane"
 import { FileTree } from "./components/file-tree"
 import { Footer } from "./components/footer"
-import { COLORS, DIFF_VIEW, KEYBINDS, PANE, type DiffView, type Keybind, type Pane } from "./config"
+import {
+  COLORS,
+  DIFF_VIEW,
+  DIFF_WRAP,
+  KEYBINDS,
+  PANE,
+  type DiffView,
+  type DiffWrap,
+  type Keybind,
+  type Pane,
+} from "./config"
 import { moveToChange, scrollDiff } from "./diff-navigation"
 
 const endpoint = await Service.ensure()
@@ -30,6 +40,7 @@ function App() {
   const [selected, setSelected] = createSignal(0)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.files)
   const [view, setView] = createSignal<DiffView>(DIFF_VIEW.unified)
+  const [wrap, setWrap] = createSignal<DiffWrap>(DIFF_WRAP.none)
   const current = () => result().data[selected()]
   const halfPage = () => {
     const height = activePane() === PANE.files ? fileList?.height : diff?.height
@@ -100,13 +111,16 @@ function App() {
     if (pressed(KEYBINDS.toggleView)) {
       setView((currentView) => currentView === DIFF_VIEW.unified ? DIFF_VIEW.split : DIFF_VIEW.unified)
     }
+    if (pressed(KEYBINDS.toggleWrap)) {
+      setWrap((currentWrap) => currentWrap === DIFF_WRAP.none ? DIFF_WRAP.word : DIFF_WRAP.none)
+    }
   })
 
   return (
     <box flexDirection="column" width="100%" height="100%" backgroundColor={COLORS.canvas}>
       <box height={1} paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
         <text fg={COLORS.text}>
-          <b>opendiff</b>  {result().location.directory}  [{view()}]
+          <b>opendiff</b>  {result().location.directory}  [{view()}, {wrap()}]
         </text>
       </box>
 
@@ -126,6 +140,7 @@ function App() {
             activePane={activePane()}
             file={current()}
             view={view()}
+            wrap={wrap()}
             onReady={(element) => (diff = element)}
           />
         </box>

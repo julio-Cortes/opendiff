@@ -1,11 +1,12 @@
 import type { FileDiffInfo } from "@opencode-ai/client"
 import type { DiffRenderable } from "@opentui/core"
-import { COLORS, PANE, type DiffView, type Pane } from "../config"
+import { COLORS, PANE, type DiffView, type DiffWrap, type Pane } from "../config"
 
 type DiffPaneProps = {
   activePane: Pane
   file?: FileDiffInfo
   view: DiffView
+  wrap: DiffWrap
   onReady: (diff: DiffRenderable) => void
 }
 
@@ -29,7 +30,7 @@ export function DiffPane(props: DiffPaneProps) {
         view={props.view}
         syncScroll
         showLineNumbers
-        wrapMode="none"
+        wrapMode={props.wrap}
         flexGrow={1}
         addedBg={COLORS.addedBackground}
         removedBg={COLORS.removedBackground}
