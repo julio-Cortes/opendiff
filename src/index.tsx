@@ -239,7 +239,7 @@ function App() {
       if (pressed(KEYBINDS.up)) setCommentListIndex((index) => Math.max(index - 1, 0))
       if (pressed(KEYBINDS.editComment)) {
         const editable = comments()[commentListIndex()]
-        if (editable?.status === "draft") setEditingComment(editable)
+        if (editable?.status === "draft") queueMicrotask(() => setEditingComment(editable))
       }
       return
     }
@@ -332,14 +332,15 @@ function App() {
       if (selectedSession && file) {
         const line = selectedDiffLine()
         const anchor = selectionAnchor() ?? line
-        setCommentDraft({
+        const draft = {
           repository: result().location.directory,
           sessionID: selectedSession.id,
           file: file.file,
           patch: file.patch,
           start: Math.min(anchor, line),
           end: Math.max(anchor, line),
-        })
+        }
+        queueMicrotask(() => setCommentDraft(draft))
       }
     }
     if (pressed(KEYBINDS.comments)) {
@@ -351,7 +352,7 @@ function App() {
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.editComment)) {
       const editable = selectedComments().find((comment) => comment.status === "draft")
-      if (editable) setEditingComment(editable)
+      if (editable) queueMicrotask(() => setEditingComment(editable))
     }
     if (pressed(KEYBINDS.sendComments)) {
       void submitComments()
@@ -451,9 +452,11 @@ function App() {
               {(commentDraft() ?? editingComment())?.file} rows {((commentDraft() ?? editingComment())?.start ?? 0) + 1}-{((commentDraft() ?? editingComment())?.end ?? 0) + 1}
             </text>
             <textarea
-              ref={(element) => (commentEditor = element)}
+              ref={(element) => {
+                commentEditor = element
+                element.initialValue = editingComment()?.body ?? ""
+              }}
               focused
-              initialValue={editingComment()?.body}
               placeholder="Write a review comment"
               flexGrow={1}
               wrapMode="word"
