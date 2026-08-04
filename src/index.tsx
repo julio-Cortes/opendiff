@@ -85,6 +85,12 @@ function App() {
     comment.start <= selectedDiffLine() && comment.end >= selectedDiffLine()
   )
   const displayedComments = () => openedComment() ? [openedComment()!] : selectedComments()
+  const footerContext = () => {
+    if (submittingComments()) return "loading" as const
+    if (commentDraft() || editingComment()) return "comment-editor" as const
+    if (commentListVisible()) return "comment-list" as const
+    return activePane()
+  }
   const halfPage = () => {
     const height = activePane() === PANE.files ? fileList?.height : diff?.height
     return Math.max(Math.floor((height ?? 2) / 2), 1)
@@ -473,7 +479,7 @@ function App() {
         </box>
       )}
 
-      <Footer activePane={activePane()} />
+      <Footer context={footerContext()} />
       <Show when={submittingComments()}>
         <box
           position="absolute"
