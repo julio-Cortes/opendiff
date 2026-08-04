@@ -207,6 +207,54 @@ export function remapDiffLine(patch: string, from: DiffView, to: DiffView, line:
   return line
 }
 
+export function getDiffSnippet(patch: string, view: DiffView, start: number, end: number) {
+  const hunks: string[][] = []
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("@@")) {
+      hunks.push([])
+      continue
+    }
+    if (hunks.length > 0 && /^[ +\-\\]/.test(line)) hunks.at(-1)?.push(line)
+  }
+
+  const rows: string[][] = []
+  if (view === DIFF_VIEW.unified) {
+    for (const line of hunks.flat()) {
+      if (!line.startsWith("\\")) rows.push([line])
+    }
+  } else {
+    for (const hunk of hunks) {
+      let index = 0
+      while (index < hunk.length) {
+        const line = hunk[index]!
+        if (line.startsWith(" ")) {
+          rows.push([line])
+          index++
+          continue
+        }
+        if (line.startsWith("\\")) {
+          index++
+          continue
+        }
+
+        const removed: string[] = []
+        const added: string[] = []
+        while (index < hunk.length && !hunk[index]!.startsWith(" ")) {
+          const changed = hunk[index]!
+          if (changed.startsWith("-")) removed.push(changed)
+          if (changed.startsWith("+")) added.push(changed)
+          index++
+        }
+        for (let row = 0; row < Math.max(removed.length, added.length); row++) {
+          rows.push([removed[row], added[row]].filter((value): value is string => value !== undefined))
+        }
+      }
+    }
+  }
+
+  return rows.slice(start, end + 1).flat().join("\n")
+}
+
 export function getDiffLineNumber(
   diff: DiffRenderable | undefined,
   patch: string,

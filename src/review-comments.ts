@@ -14,6 +14,7 @@ export type ReviewComment = {
   sessionID: string
   file: string
   patch: string
+  snippet?: string
   start: number
   end: number
   body: string
