@@ -163,6 +163,15 @@ function App() {
     setSession(selectedSession)
   }
 
+  const deleteComment = (target: ReviewComment) => {
+    setComments((current) => {
+      const next = current.filter((comment) => comment.id !== target.id)
+      void saveReviewComments(target.repository, target.sessionID, next)
+      return next
+    })
+    setCommentListIndex((index) => Math.max(index - 1, 0))
+  }
+
   const submitComments = async () => {
     const selectedSession = session()
     const drafts = comments().filter((comment) => comment.status === "draft")
@@ -240,6 +249,10 @@ function App() {
       if (pressed(KEYBINDS.editComment)) {
         const editable = comments()[commentListIndex()]
         if (editable?.status === "draft") queueMicrotask(() => setEditingComment(editable))
+      }
+      if (pressed(KEYBINDS.deleteComment)) {
+        const target = comments()[commentListIndex()]
+        if (target) deleteComment(target)
       }
       return
     }
@@ -353,6 +366,10 @@ function App() {
     if (activePane() === PANE.diff && pressed(KEYBINDS.editComment)) {
       const editable = selectedComments().find((comment) => comment.status === "draft")
       if (editable) queueMicrotask(() => setEditingComment(editable))
+    }
+    if (activePane() === PANE.diff && pressed(KEYBINDS.deleteComment)) {
+      const target = selectedComments()[0]
+      if (target) deleteComment(target)
     }
     if (pressed(KEYBINDS.sendComments)) {
       void submitComments()
@@ -489,7 +506,7 @@ function App() {
           backgroundColor={COLORS.panel}
         >
           <text fg={COLORS.textStrong}><b>All review comments</b></text>
-          <text fg={COLORS.textMuted}>{comments().length} comments  j/k select  i edit draft  esc close</text>
+          <text fg={COLORS.textMuted}>{comments().length} comments  j/k select  i edit draft  d delete  esc close</text>
           <scrollbox flexGrow={1} scrollX={false} scrollY>
             <Show when={comments().length > 0} fallback={<text fg={COLORS.textMuted}>No review comments</text>}>
               <For each={comments()}>
