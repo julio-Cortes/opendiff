@@ -77,6 +77,7 @@ export const KEYBINDS = {
   previousChange: [{ name: "[" }],
   up: [{ name: "k" }, { name: "up" }],
   refresh: [{ name: "r" }],
+  replyThread: [{ name: "f" }],
   sendComments: [{ name: "a" }],
   select: [{ name: "return" }],
   switchPane: [{ name: "tab" }],

@@ -73,6 +73,7 @@ function App() {
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>()
   const [commentDraft, setCommentDraft] = createSignal<CommentDraft>()
   const [editingComment, setEditingComment] = createSignal<ReviewComment>()
+  const [replyingComment, setReplyingComment] = createSignal<ReviewComment>()
   const [comments, setComments] = createSignal<ReviewComment[]>([])
   const [commentsVisible, setCommentsVisible] = createSignal(false)
   const [commentListVisible, setCommentListVisible] = createSignal(false)
@@ -96,9 +97,10 @@ function App() {
   const displayedComments = () => openedComment() ? [openedComment()!] : selectedComments()
   const footerContext = () => {
     if (submittingComments()) return "loading" as const
-    if (commentDraft() || editingComment()) return "comment-editor" as const
+    if (commentDraft() || editingComment() || replyingComment()) return "comment-editor" as const
     if (paletteVisible()) return "command-palette" as const
     if (commentListVisible()) return "comment-list" as const
+    if (commentsVisible() && displayedComments().length > 0) return "thread" as const
     return activePane()
   }
   const halfPage = () => {
@@ -148,8 +150,14 @@ function App() {
   const saveComment = () => {
     const draft = commentDraft()
     const editing = editingComment()
+    const replying = replyingComment()
     const text = commentEditor?.plainText.trim()
     if (!text) return
+    if (replying) {
+      setReplyingComment()
+      void submitThreadReply(replying, text)
+      return
+    }
     if (editing) {
       setComments((current) => {
         const next = current.map((comment) => comment.id === editing.id ? { ...comment, body: text } : comment)
@@ -212,6 +220,10 @@ function App() {
     { label: `${wrap() === DIFF_WRAP.none ? "Enable" : "Disable"} line wrapping`, keywords: "wrap lines", run: toggleWrap },
     { label: "Toggle comment markers", keywords: "show hide comments", run: () => setCommentsVisible((visible) => !visible) },
     { label: "Open all comments", keywords: "review list panel", run: () => setCommentListVisible(true) },
+    { label: "Reply to open thread", keywords: "follow up respond comment", run: () => {
+      const target = displayedComments()[0]
+      if (target && commentsVisible()) queueMicrotask(() => setReplyingComment(target))
+    } },
     { label: "Send draft comments", keywords: "agent submit review", run: () => void submitComments() },
     { label: "Edit current file", keywords: "editor open", run: () => void edit() },
     { label: "Switch pane", keywords: "files diff focus", run: () => setActivePane((pane) => pane === PANE.files ? PANE.diff : PANE.files) },
@@ -232,6 +244,62 @@ function App() {
     command.run()
   }
 
+  const requestAgentReplies = async (sessionID: string, prompt: string) => {
+    const pending = await client.session.prompt({ sessionID, text: prompt })
+    await client.session.wait({ sessionID })
+    const messages = await client.message.list({ sessionID, order: "desc", limit: 20 })
+    const response = messages.data.find((message) =>
+      message.type === "assistant" && message.time.created >= pending.timeCreated
+    )
+    const text = response?.type === "assistant"
+      ? response.content.filter((part) => part.type === "text").map((part) => part.text).join("")
+      : ""
+    const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].at(-1)?.[1]
+    const parsed = JSON.parse(fenced ?? text) as { replies: Array<{ id: string; body: string }> }
+    return new Map(parsed.replies.map((reply) => [reply.id, reply.body]))
+  }
+
+  const submitThreadReply = async (target: ReviewComment, body: string) => {
+    const selectedSession = session()
+    if (!selectedSession || submittingComments()) return
+
+    const userReply = { id: crypto.randomUUID(), body, role: "user" as const }
+    const submitted = comments().map((comment) => comment.id === target.id
+      ? { ...comment, status: "submitted" as const, replies: [...comment.replies, userReply] }
+      : comment
+    )
+    const submittedTarget = submitted.find((comment) => comment.id === target.id)!
+    setComments(submitted)
+    if (openedComment()?.id === target.id) setOpenedComment(submittedTarget)
+    setSubmittingComments(true)
+    try {
+      await saveReviewComments(result().location.directory, selectedSession.id, submitted)
+      const thread = [
+        `USER: ${submittedTarget.body}`,
+        ...submittedTarget.replies.map((reply) => `${reply.role === "assistant" ? "AGENT" : "USER"}: ${reply.body}`),
+      ].join("\n\n")
+      const prompt = `Continue this diff review thread. Make any requested code changes, then respond with only JSON in the form {"replies":[{"id":"${target.id}","body":"your response"}]}.\n\nCOMMENT ${target.id}\nFile: ${target.file}\nOriginal patch:\n${target.patch}\n\nTHREAD:\n${thread}`
+      const replies = await requestAgentReplies(selectedSession.id, prompt)
+      const agentBody = replies.get(target.id)
+      if (!agentBody) return
+      const answered = submitted.map((comment) => comment.id === target.id
+        ? {
+            ...comment,
+            status: "answered" as const,
+            replies: [...comment.replies, { id: crypto.randomUUID(), body: agentBody, role: "assistant" as const }],
+          }
+        : comment
+      )
+      const answeredTarget = answered.find((comment) => comment.id === target.id)!
+      setComments(answered)
+      if (openedComment()?.id === target.id) setOpenedComment(answeredTarget)
+      await saveReviewComments(result().location.directory, selectedSession.id, answered)
+      await refresh()
+    } finally {
+      setSubmittingComments(false)
+    }
+  }
+
   const submitComments = async () => {
     const selectedSession = session()
     const drafts = comments().filter((comment) => comment.status === "draft")
@@ -246,18 +314,7 @@ function App() {
       await saveReviewComments(result().location.directory, selectedSession.id, submitted)
 
       const prompt = `Address these diff review comments. Each comment has a stable ID. Make the requested code changes, then respond with only JSON in the form {"replies":[{"id":"comment-id","body":"summary of what you did"}]} using one reply for every comment.\n\n${drafts.map((comment) => `COMMENT ${comment.id}\nFile: ${comment.file}\nDiff rows: ${comment.start + 1}-${comment.end + 1}\nComment: ${comment.body}\nPatch:\n${comment.patch}`).join("\n\n")}`
-      const pending = await client.session.prompt({ sessionID: selectedSession.id, text: prompt })
-      await client.session.wait({ sessionID: selectedSession.id })
-      const messages = await client.message.list({ sessionID: selectedSession.id, order: "desc", limit: 20 })
-      const response = messages.data.find((message) =>
-        message.type === "assistant" && message.time.created >= pending.timeCreated
-      )
-      const text = response?.type === "assistant"
-        ? response.content.filter((part) => part.type === "text").map((part) => part.text).join("")
-        : ""
-      const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].at(-1)?.[1]
-      const parsed = JSON.parse(fenced ?? text) as { replies: Array<{ id: string; body: string }> }
-      const replies = new Map(parsed.replies.map((reply) => [reply.id, reply.body]))
+      const replies = await requestAgentReplies(selectedSession.id, prompt)
       const answered = submitted.map((comment) => {
         const body = replies.get(comment.id)
         if (!body) return comment
@@ -296,10 +353,11 @@ function App() {
     const pressed = (bindings: readonly Keybind[]) =>
       bindings.some((binding) => binding.name === key.name && Boolean(binding.ctrl) === key.ctrl)
 
-    if (commentDraft() || editingComment()) {
+    if (commentDraft() || editingComment() || replyingComment()) {
       if (key.name === "escape") {
         setCommentDraft()
         setEditingComment()
+        setReplyingComment()
       }
       return
     }
@@ -447,6 +505,14 @@ function App() {
     if (activePane() === PANE.diff && pressed(KEYBINDS.visual)) {
       setSelectionAnchor((anchor) => anchor === undefined ? selectedDiffLine() : undefined)
     }
+    if (pressed(KEYBINDS.replyThread)) {
+      const target = displayedComments()[0]
+      if (commentsVisible() && target) {
+        key.preventDefault()
+        key.stopPropagation()
+        queueMicrotask(() => setReplyingComment(target))
+      }
+    }
     if (activePane() === PANE.diff && pressed(KEYBINDS.comment)) {
       key.preventDefault()
       key.stopPropagation()
@@ -478,8 +544,8 @@ function App() {
       const editable = selectedComments().find((comment) => comment.status === "draft")
       if (editable) queueMicrotask(() => setEditingComment(editable))
     }
-    if (activePane() === PANE.diff && pressed(KEYBINDS.deleteComment)) {
-      const target = selectedComments()[0]
+    if (commentsVisible() && pressed(KEYBINDS.deleteComment)) {
+      const target = displayedComments()[0]
       if (target) deleteComment(target)
     }
     if (pressed(KEYBINDS.sendComments)) {
@@ -628,7 +694,7 @@ function App() {
           </box>
         </box>
       </Show>
-      <Show when={commentDraft() || editingComment()}>
+      <Show when={commentDraft() || editingComment() || replyingComment()}>
         <box
           position="absolute"
           top={0}
@@ -649,9 +715,11 @@ function App() {
             borderColor={COLORS.comment}
             backgroundColor={COLORS.panel}
           >
-            <text fg={COLORS.textStrong}><b>{editingComment() ? "Edit review comment" : "Add review comment"}</b></text>
+            <text fg={COLORS.textStrong}>
+              <b>{replyingComment() ? "Reply to review thread" : editingComment() ? "Edit review comment" : "Add review comment"}</b>
+            </text>
             <text fg={COLORS.textMuted}>
-              {(commentDraft() ?? editingComment())?.file} rows {((commentDraft() ?? editingComment())?.start ?? 0) + 1}-{((commentDraft() ?? editingComment())?.end ?? 0) + 1}
+              {(commentDraft() ?? editingComment() ?? replyingComment())?.file} rows {((commentDraft() ?? editingComment() ?? replyingComment())?.start ?? 0) + 1}-{((commentDraft() ?? editingComment() ?? replyingComment())?.end ?? 0) + 1}
             </text>
             <textarea
               ref={(element) => {
@@ -659,7 +727,7 @@ function App() {
                 element.initialValue = editingComment()?.body ?? ""
               }}
               focused
-              placeholder="Write a review comment"
+              placeholder={replyingComment() ? "Write a follow-up" : "Write a review comment"}
               flexGrow={1}
               wrapMode="word"
               textColor={COLORS.text}
@@ -783,7 +851,7 @@ function App() {
               )}
             </For>
           </scrollbox>
-          <text fg={COLORS.textMuted}>esc hide</text>
+          <text fg={COLORS.textMuted}>f reply  esc hide</text>
         </box>
       </Show>
       </box>
