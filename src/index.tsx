@@ -71,6 +71,7 @@ function App() {
   const [commentsVisible, setCommentsVisible] = createSignal(false)
   const [commentListVisible, setCommentListVisible] = createSignal(false)
   const [commentListIndex, setCommentListIndex] = createSignal(0)
+  const [openedComment, setOpenedComment] = createSignal<ReviewComment>()
   const [submittingComments, setSubmittingComments] = createSignal(false)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
@@ -83,6 +84,7 @@ function App() {
   const selectedComments = () => currentComments().filter((comment) =>
     comment.start <= selectedDiffLine() && comment.end >= selectedDiffLine()
   )
+  const displayedComments = () => openedComment() ? [openedComment()!] : selectedComments()
   const halfPage = () => {
     const height = activePane() === PANE.files ? fileList?.height : diff?.height
     return Math.max(Math.floor((height ?? 2) / 2), 1)
@@ -169,6 +171,7 @@ function App() {
       void saveReviewComments(target.repository, target.sessionID, next)
       return next
     })
+    if (openedComment()?.id === target.id) setOpenedComment()
     setCommentListIndex((index) => Math.max(index - 1, 0))
   }
 
@@ -257,6 +260,25 @@ function App() {
         const target = comments()[commentListIndex()]
         if (target) deleteComment(target)
       }
+      if (pressed(KEYBINDS.select)) {
+        const target = comments()[commentListIndex()]
+        const fileIndex = target
+          ? result().data.findIndex((file) => file.file === target.file && file.patch === target.patch)
+          : -1
+        const fallbackIndex = target ? result().data.findIndex((file) => file.file === target.file) : -1
+        const targetIndex = fileIndex >= 0 ? fileIndex : fallbackIndex
+        if (target) {
+          if (targetIndex >= 0) {
+            setSelected(targetIndex)
+            setSelectedDiffLine(target.start)
+            setSelectionAnchor()
+            setActivePane(PANE.diff)
+          }
+          setCommentsVisible(true)
+          setOpenedComment(target)
+          setCommentListVisible(false)
+        }
+      }
       return
     }
     if (selectionAnchor() !== undefined && key.name === "escape") {
@@ -265,6 +287,7 @@ function App() {
     }
     if (commentsVisible() && key.name === "escape") {
       setCommentsVisible(false)
+      setOpenedComment()
       return
     }
     if (pressed(KEYBINDS.quit)) {
@@ -296,6 +319,7 @@ function App() {
       return
     }
     if (pressed(KEYBINDS.down)) {
+      setOpenedComment()
       if (activePane() === PANE.files) {
         setSelected((index) => Math.min(index + 1, Math.max(result().data.length - 1, 0)))
         setSelectedDiffLine(0)
@@ -305,6 +329,7 @@ function App() {
       }
     }
     if (pressed(KEYBINDS.up)) {
+      setOpenedComment()
       if (activePane() === PANE.files) {
         setSelected((index) => Math.max(index - 1, 0))
         setSelectedDiffLine(0)
@@ -314,6 +339,7 @@ function App() {
       }
     }
     if (pressed(KEYBINDS.pageDown)) {
+      setOpenedComment()
       if (activePane() === PANE.files) {
         setSelected((index) => Math.min(index + halfPage(), Math.max(result().data.length - 1, 0)))
         setSelectedDiffLine(0)
@@ -323,6 +349,7 @@ function App() {
       }
     }
     if (pressed(KEYBINDS.pageUp)) {
+      setOpenedComment()
       if (activePane() === PANE.files) {
         setSelected((index) => Math.max(index - halfPage(), 0))
         setSelectedDiffLine(0)
@@ -360,6 +387,7 @@ function App() {
       }
     }
     if (pressed(KEYBINDS.comments)) {
+      setOpenedComment()
       setCommentsVisible((visible) => !visible)
     }
     if (pressed(KEYBINDS.listComments)) {
@@ -577,7 +605,7 @@ function App() {
           </scrollbox>
         </box>
       </Show>
-      <Show when={!commentListVisible() && commentsVisible() && selectedComments().length > 0}>
+      <Show when={!commentListVisible() && commentsVisible() && displayedComments().length > 0}>
         <box
           position="absolute"
           top={2}
@@ -594,7 +622,7 @@ function App() {
         >
           <text fg={COLORS.textStrong}><b>Review comments</b></text>
           <scrollbox flexGrow={1} scrollX={false} scrollY>
-            <For each={selectedComments()}>
+            <For each={displayedComments()}>
               {(comment) => (
                 <box flexDirection="column" marginBottom={1}>
                   <text fg={COLORS.textMuted}>{comment.file}:{comment.start + 1}-{comment.end + 1}</text>
