@@ -178,38 +178,41 @@ function App() {
     if (!selectedSession || drafts.length === 0 || submittingComments()) return
 
     setSubmittingComments(true)
-    const submitted = comments().map((comment) =>
-      comment.status === "draft" ? { ...comment, status: "submitted" as const } : comment
-    )
-    setComments(submitted)
-    await saveReviewComments(result().location.directory, selectedSession.id, submitted)
+    try {
+      const submitted = comments().map((comment) =>
+        comment.status === "draft" ? { ...comment, status: "submitted" as const } : comment
+      )
+      setComments(submitted)
+      await saveReviewComments(result().location.directory, selectedSession.id, submitted)
 
-    const prompt = `Address these diff review comments. Each comment has a stable ID. Make the requested code changes, then respond with only JSON in the form {"replies":[{"id":"comment-id","body":"summary of what you did"}]} using one reply for every comment.\n\n${drafts.map((comment) => `COMMENT ${comment.id}\nFile: ${comment.file}\nDiff rows: ${comment.start + 1}-${comment.end + 1}\nComment: ${comment.body}\nPatch:\n${comment.patch}`).join("\n\n")}`
-    const pending = await client.session.prompt({ sessionID: selectedSession.id, text: prompt })
-    await client.session.wait({ sessionID: selectedSession.id })
-    const messages = await client.message.list({ sessionID: selectedSession.id, order: "desc", limit: 20 })
-    const response = messages.data.find((message) =>
-      message.type === "assistant" && message.time.created >= pending.timeCreated
-    )
-    const text = response?.type === "assistant"
-      ? response.content.filter((part) => part.type === "text").map((part) => part.text).join("")
-      : ""
-    const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].at(-1)?.[1]
-    const parsed = JSON.parse(fenced ?? text) as { replies: Array<{ id: string; body: string }> }
-    const replies = new Map(parsed.replies.map((reply) => [reply.id, reply.body]))
-    const answered = submitted.map((comment) => {
-      const body = replies.get(comment.id)
-      if (!body) return comment
-      return {
-        ...comment,
-        status: "answered" as const,
-        replies: [...comment.replies, { id: crypto.randomUUID(), body, role: "assistant" as const }],
-      }
-    })
-    setComments(answered)
-    await saveReviewComments(result().location.directory, selectedSession.id, answered)
-    setSubmittingComments(false)
-    await refresh()
+      const prompt = `Address these diff review comments. Each comment has a stable ID. Make the requested code changes, then respond with only JSON in the form {"replies":[{"id":"comment-id","body":"summary of what you did"}]} using one reply for every comment.\n\n${drafts.map((comment) => `COMMENT ${comment.id}\nFile: ${comment.file}\nDiff rows: ${comment.start + 1}-${comment.end + 1}\nComment: ${comment.body}\nPatch:\n${comment.patch}`).join("\n\n")}`
+      const pending = await client.session.prompt({ sessionID: selectedSession.id, text: prompt })
+      await client.session.wait({ sessionID: selectedSession.id })
+      const messages = await client.message.list({ sessionID: selectedSession.id, order: "desc", limit: 20 })
+      const response = messages.data.find((message) =>
+        message.type === "assistant" && message.time.created >= pending.timeCreated
+      )
+      const text = response?.type === "assistant"
+        ? response.content.filter((part) => part.type === "text").map((part) => part.text).join("")
+        : ""
+      const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].at(-1)?.[1]
+      const parsed = JSON.parse(fenced ?? text) as { replies: Array<{ id: string; body: string }> }
+      const replies = new Map(parsed.replies.map((reply) => [reply.id, reply.body]))
+      const answered = submitted.map((comment) => {
+        const body = replies.get(comment.id)
+        if (!body) return comment
+        return {
+          ...comment,
+          status: "answered" as const,
+          replies: [...comment.replies, { id: crypto.randomUUID(), body, role: "assistant" as const }],
+        }
+      })
+      setComments(answered)
+      await saveReviewComments(result().location.directory, selectedSession.id, answered)
+      await refresh()
+    } finally {
+      setSubmittingComments(false)
+    }
   }
 
   createEffect(() => {
@@ -443,6 +446,34 @@ function App() {
       )}
 
       <Footer activePane={activePane()} />
+      <Show when={submittingComments()}>
+        <box
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <box
+            width="50%"
+            maxWidth={64}
+            height={7}
+            padding={1}
+            flexDirection="column"
+            alignItems="center"
+            justifyContent="center"
+            borderStyle="single"
+            borderColor={COLORS.syntaxProperty}
+            backgroundColor={COLORS.panel}
+          >
+            <text fg={COLORS.syntaxProperty}><b>Agent is working...</b></text>
+            <text fg={COLORS.text}>Waiting for the review response</text>
+            <text fg={COLORS.textMuted}>Comments were sent to {session()?.title ?? session()?.id}</text>
+          </box>
+        </box>
+      </Show>
       <Show when={commentDraft() || editingComment()}>
         <box
           position="absolute"
