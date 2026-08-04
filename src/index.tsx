@@ -53,6 +53,12 @@ const initialSessions = await client.session.list({
 
 type CommentDraft = Omit<ReviewComment, "id" | "body" | "status" | "replies">
 
+type PaletteCommand = {
+  label: string
+  keywords: string
+  run: () => void
+}
+
 function App() {
   const renderer = useRenderer()
   let fileList: ScrollBoxRenderable | undefined
@@ -72,6 +78,9 @@ function App() {
   const [commentListVisible, setCommentListVisible] = createSignal(false)
   const [commentListIndex, setCommentListIndex] = createSignal(0)
   const [openedComment, setOpenedComment] = createSignal<ReviewComment>()
+  const [paletteVisible, setPaletteVisible] = createSignal(false)
+  const [paletteQuery, setPaletteQuery] = createSignal("")
+  const [paletteIndex, setPaletteIndex] = createSignal(0)
   const [submittingComments, setSubmittingComments] = createSignal(false)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
@@ -88,6 +97,7 @@ function App() {
   const footerContext = () => {
     if (submittingComments()) return "loading" as const
     if (commentDraft() || editingComment()) return "comment-editor" as const
+    if (paletteVisible()) return "command-palette" as const
     if (commentListVisible()) return "comment-list" as const
     return activePane()
   }
@@ -181,6 +191,47 @@ function App() {
     setCommentListIndex((index) => Math.max(index - 1, 0))
   }
 
+  const toggleView = () => {
+    const nextView = view() === DIFF_VIEW.unified ? DIFF_VIEW.split : DIFF_VIEW.unified
+    setSelectedDiffLine((line) => remapDiffLine(current()?.patch ?? "", view(), nextView, line))
+    setSelectionAnchor()
+    setView(nextView)
+    void saveSettings({ view: nextView, wrap: wrap() })
+  }
+
+  const toggleWrap = () => {
+    const nextWrap = wrap() === DIFF_WRAP.none ? DIFF_WRAP.word : DIFF_WRAP.none
+    setWrap(nextWrap)
+    void saveSettings({ view: view(), wrap: nextWrap })
+  }
+
+  const paletteCommands = (): PaletteCommand[] => [
+    { label: "Refresh diff", keywords: "reload changes", run: () => void refresh() },
+    { label: `Switch to ${mode() === DIFF_MODE.working ? "branch" : "working"} diff`, keywords: "mode branch working", run: () => void refresh(mode() === DIFF_MODE.working ? DIFF_MODE.branch : DIFF_MODE.working) },
+    { label: `Switch to ${view() === DIFF_VIEW.unified ? "split" : "unified"} view`, keywords: "layout diff view", run: toggleView },
+    { label: `${wrap() === DIFF_WRAP.none ? "Enable" : "Disable"} line wrapping`, keywords: "wrap lines", run: toggleWrap },
+    { label: "Toggle comment markers", keywords: "show hide comments", run: () => setCommentsVisible((visible) => !visible) },
+    { label: "Open all comments", keywords: "review list panel", run: () => setCommentListVisible(true) },
+    { label: "Send draft comments", keywords: "agent submit review", run: () => void submitComments() },
+    { label: "Edit current file", keywords: "editor open", run: () => void edit() },
+    { label: "Switch pane", keywords: "files diff focus", run: () => setActivePane((pane) => pane === PANE.files ? PANE.diff : PANE.files) },
+    { label: "Quit OpenDiff", keywords: "exit close", run: () => renderer.destroy() },
+  ]
+
+  const filteredPaletteCommands = () => {
+    const query = paletteQuery().trim().toLowerCase()
+    if (!query) return paletteCommands()
+    return paletteCommands().filter((command) => `${command.label} ${command.keywords}`.toLowerCase().includes(query))
+  }
+
+  const runPaletteCommand = () => {
+    const command = filteredPaletteCommands()[paletteIndex()]
+    if (!command) return
+    setPaletteVisible(false)
+    setPaletteQuery("")
+    command.run()
+  }
+
   const submitComments = async () => {
     const selectedSession = session()
     const drafts = comments().filter((comment) => comment.status === "draft")
@@ -250,6 +301,29 @@ function App() {
         setCommentDraft()
         setEditingComment()
       }
+      return
+    }
+    if (paletteVisible()) {
+      if (key.name === "escape" || pressed(KEYBINDS.commandPalette)) {
+        setPaletteVisible(false)
+        setPaletteQuery("")
+      } else if (key.name === "down") {
+        key.preventDefault()
+        setPaletteIndex((index) => Math.min(index + 1, Math.max(filteredPaletteCommands().length - 1, 0)))
+      } else if (key.name === "up") {
+        key.preventDefault()
+        setPaletteIndex((index) => Math.max(index - 1, 0))
+      } else if (pressed(KEYBINDS.select)) {
+        key.preventDefault()
+        runPaletteCommand()
+      }
+      return
+    }
+    if (session() && pressed(KEYBINDS.commandPalette)) {
+      key.preventDefault()
+      key.stopPropagation()
+      setPaletteIndex(0)
+      queueMicrotask(() => setPaletteVisible(true))
       return
     }
     if (commentListVisible()) {
@@ -421,16 +495,10 @@ function App() {
       void edit()
     }
     if (pressed(KEYBINDS.toggleView)) {
-      const nextView = view() === DIFF_VIEW.unified ? DIFF_VIEW.split : DIFF_VIEW.unified
-      setSelectedDiffLine((line) => remapDiffLine(current()?.patch ?? "", view(), nextView, line))
-      setSelectionAnchor()
-      setView(nextView)
-      void saveSettings({ view: nextView, wrap: wrap() })
+      toggleView()
     }
     if (pressed(KEYBINDS.toggleWrap)) {
-      const nextWrap = wrap() === DIFF_WRAP.none ? DIFF_WRAP.word : DIFF_WRAP.none
-      setWrap(nextWrap)
-      void saveSettings({ view: view(), wrap: nextWrap })
+      toggleWrap()
     }
   })
 
@@ -505,6 +573,58 @@ function App() {
             <text fg={COLORS.syntaxProperty}><b>Agent is working...</b></text>
             <text fg={COLORS.text}>Waiting for the review response</text>
             <text fg={COLORS.textMuted}>Comments were sent to {session()?.title ?? session()?.id}</text>
+          </box>
+        </box>
+      </Show>
+      <Show when={paletteVisible()}>
+        <box
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <box
+            width="60%"
+            maxWidth={72}
+            height={16}
+            padding={1}
+            flexDirection="column"
+            borderStyle="single"
+            borderColor={COLORS.selection}
+            backgroundColor={COLORS.panel}
+          >
+            <text fg={COLORS.textStrong}><b>Command palette</b></text>
+            <input
+              focused
+              placeholder="Search commands"
+              value={paletteQuery()}
+              textColor={COLORS.text}
+              backgroundColor={COLORS.canvas}
+              focusedTextColor={COLORS.text}
+              focusedBackgroundColor={COLORS.canvas}
+              onInput={(value) => {
+                setPaletteQuery(value)
+                setPaletteIndex(0)
+              }}
+            />
+            <box flexDirection="column" marginTop={1}>
+              <Show when={filteredPaletteCommands().length > 0} fallback={<text fg={COLORS.textMuted}>No matching commands</text>}>
+                <For each={filteredPaletteCommands()}>
+                  {(command, index) => (
+                    <box
+                      height={1}
+                      paddingLeft={1}
+                      backgroundColor={index() === paletteIndex() ? COLORS.selection : COLORS.panel}
+                    >
+                      <text fg={COLORS.text}>{command.label}</text>
+                    </box>
+                  )}
+                </For>
+              </Show>
+            </box>
           </box>
         </box>
       </Show>

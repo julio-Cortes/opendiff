@@ -63,6 +63,7 @@ export type Pane = (typeof PANE)[keyof typeof PANE]
 
 export const KEYBINDS = {
   comment: [{ name: "c" }],
+  commandPalette: [{ name: "p", ctrl: true }],
   comments: [{ name: "m" }],
   deleteComment: [{ name: "d" }],
   quit: [{ name: "q" }, { name: "escape" }, { name: "c", ctrl: true }],
