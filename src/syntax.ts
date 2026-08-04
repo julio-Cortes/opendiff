@@ -1,5 +1,12 @@
-import { SyntaxStyle } from "@opentui/core"
+import { addDefaultParsers, SyntaxStyle } from "@opentui/core"
+import { fileURLToPath } from "node:url"
 import { COLORS } from "./config"
+
+addDefaultParsers([{
+  filetype: "python",
+  queries: { highlights: [fileURLToPath(import.meta.resolve("tree-sitter-python/queries/highlights.scm"))] },
+  wasm: fileURLToPath(import.meta.resolve("tree-sitter-python/tree-sitter-python.wasm")),
+}])
 
 export function createSyntaxStyle() {
   return SyntaxStyle.fromStyles({
