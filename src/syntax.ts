@@ -1,12 +1,18 @@
 import { addDefaultParsers, SyntaxStyle } from "@opentui/core"
-import { fileURLToPath } from "node:url"
+import { getQueryPath, getWasmPath, type SupportedLanguage } from "tree-sitter-wasm"
+import manifest from "tree-sitter-wasm/manifest.json"
 import { COLORS } from "./config"
 
-addDefaultParsers([{
-  filetype: "python",
-  queries: { highlights: [fileURLToPath(import.meta.resolve("tree-sitter-python/queries/highlights.scm"))] },
-  wasm: fileURLToPath(import.meta.resolve("tree-sitter-python/tree-sitter-python.wasm")),
-}])
+addDefaultParsers(Object.entries(manifest)
+  .filter(([, queries]) => queries.includes("highlights"))
+  .map(([filetype]) => {
+    const language = filetype as SupportedLanguage
+    return {
+      filetype,
+      queries: { highlights: [getQueryPath(language, "highlights")] },
+      wasm: getWasmPath(language),
+    }
+  }))
 
 export function createSyntaxStyle() {
   return SyntaxStyle.fromStyles({
