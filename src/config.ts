@@ -26,6 +26,9 @@ export const LAYOUT = {
   fileTreeWidth: "30%",
   fileTreeMinWidth: 20,
   fileTreeMaxWidth: 48,
+  planSidebarWidth: "32%",
+  planSidebarMinWidth: 32,
+  planSidebarMaxWidth: 56,
 } as const
 
 export type Keybind = {
@@ -57,6 +60,7 @@ export type DiffWrap = (typeof DIFF_WRAP)[keyof typeof DIFF_WRAP]
 export const PANE = {
   files: "files",
   diff: "diff",
+  plan: "plan",
 } as const
 
 export type Pane = (typeof PANE)[keyof typeof PANE]
@@ -84,6 +88,8 @@ export const KEYBINDS = {
   toggleMode: [{ name: "b" }],
   toggleView: [{ name: "s" }],
   toggleWrap: [{ name: "w" }],
+  togglePlan: [{ name: "p" }],
+  toggleTask: [{ name: "space" }],
   visual: [{ name: "v" }],
 } as const satisfies Record<string, readonly Keybind[]>
 

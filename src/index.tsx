@@ -9,6 +9,7 @@ import { createEffect, createSignal, For, Show } from "solid-js"
 import { DiffPane } from "./components/diff-pane"
 import { FileTree } from "./components/file-tree"
 import { Footer } from "./components/footer"
+import { PlanSidebar } from "./components/plan-sidebar"
 import { SessionPicker } from "./components/session-picker"
 import {
   COLORS,
@@ -35,6 +36,7 @@ import {
 } from "./diff-navigation"
 import { loadReviewComments, saveReviewComments, type ReviewComment } from "./review-comments"
 import { loadSettings, saveSettings } from "./settings"
+import { loadFeaturePlan, togglePlanTask } from "./plans"
 
 const endpoint = await Service.ensure()
 const client = OpenCode.make({
@@ -51,6 +53,7 @@ const initialSessions = await client.session.list({
   directory: process.cwd(),
   order: "desc",
 })
+const initialPlan = await loadFeaturePlan(initialResult.location.directory)
 
 type CommentDraft = Omit<ReviewComment, "id" | "body" | "status" | "replies">
 
@@ -64,6 +67,7 @@ function App() {
   const renderer = useRenderer()
   let fileList: ScrollBoxRenderable | undefined
   let diff: DiffRenderable | undefined
+  let taskList: ScrollBoxRenderable | undefined
   let commentEditor: TextareaRenderable | undefined
   let editing = false
   const [result, setResult] = createSignal(initialResult)
@@ -88,6 +92,10 @@ function App() {
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
   const [view, setView] = createSignal<DiffView>(initialSettings.view)
   const [wrap, setWrap] = createSignal<DiffWrap>(initialSettings.wrap)
+  const [plan, setPlan] = createSignal(initialPlan)
+  const [planOpen, setPlanOpen] = createSignal(false)
+  const [selectedPr, setSelectedPr] = createSignal(Math.max(initialPlan?.prs.findIndex((pr) => pr.number === initialPlan.currentPr) ?? 0, 0))
+  const [selectedTask, setSelectedTask] = createSignal(0)
   const current = () => result().data[selected()]
   const currentComments = () => comments().filter((comment) =>
     comment.file === current()?.file && comment.patch === current()?.patch
@@ -105,7 +113,7 @@ function App() {
     return activePane()
   }
   const halfPage = () => {
-    const height = activePane() === PANE.files ? fileList?.height : diff?.height
+    const height = activePane() === PANE.files ? fileList?.height : activePane() === PANE.plan ? taskList?.height : diff?.height
     return Math.max(Math.floor((height ?? 2) / 2), 1)
   }
 
@@ -120,10 +128,15 @@ function App() {
     setSelectionAnchor()
     if (nextMode !== mode()) setSelectedDiffLine(0)
     setMode(nextMode)
+    const nextPlan = await loadFeaturePlan(next.location.directory)
+    setPlan(nextPlan)
+    setSelectedPr((index) => Math.min(index, Math.max((nextPlan?.prs.length ?? 1) - 1, 0)))
+    setSelectedTask((index) => Math.min(index, Math.max((nextPlan?.prs[selectedPr()]?.tasks.length ?? 1) - 1, 0)))
   }
 
   const edit = async () => {
-    const file = current()?.file
+    const selectedPlan = plan()?.prs[selectedPr()]
+    const file = activePane() === PANE.plan ? selectedPlan?.path : current()?.file
     if (!file || editing) return
 
     editing = true
@@ -131,7 +144,10 @@ function App() {
     try {
       const editor = process.env.VISUAL || process.env.EDITOR || "vi"
       const path = resolve(result().location.directory, file)
-      const line = getDiffLineNumber(diff, current()?.patch ?? "", view(), selectedDiffLine())
+      const taskLine = selectedPlan?.tasks[selectedTask()]?.line
+      const line = activePane() === PANE.plan
+        ? taskLine === undefined ? undefined : taskLine + 1
+        : getDiffLineNumber(diff, current()?.patch ?? "", view(), selectedDiffLine())
       const command = [editor]
       if (["vi", "vim", "nvim"].includes(basename(editor)) && line !== undefined) command.push(`+${line}`)
       command.push(path)
@@ -214,6 +230,20 @@ function App() {
     void saveSettings({ view: view(), wrap: nextWrap })
   }
 
+  const togglePlanSidebar = () => {
+    if (planOpen()) {
+      if (activePane() === PANE.plan) setActivePane(PANE.diff)
+      setPlanOpen(false)
+      return
+    }
+
+    const currentPr = plan()?.currentPr
+    const currentIndex = plan()?.prs.findIndex((pr) => pr.number === currentPr) ?? -1
+    setSelectedPr(Math.max(currentIndex, 0))
+    setSelectedTask(0)
+    setPlanOpen(true)
+  }
+
   const paletteCommands = (): PaletteCommand[] => [
     { label: "Refresh diff", keywords: "reload changes", run: () => void refresh() },
     { label: `Switch to ${mode() === DIFF_MODE.working ? "branch" : "working"} diff`, keywords: "mode branch working", run: () => void refresh(mode() === DIFF_MODE.working ? DIFF_MODE.branch : DIFF_MODE.working) },
@@ -226,8 +256,9 @@ function App() {
       if (target && commentsVisible()) queueMicrotask(() => setReplyingComment(target))
     } },
     { label: "Send draft comments", keywords: "agent submit review", run: () => void submitComments() },
+    { label: `${planOpen() ? "Hide" : "Show"} feature plan`, keywords: "sidebar tasks PR stack", run: togglePlanSidebar },
     { label: "Edit current file", keywords: "editor open", run: () => void edit() },
-    { label: "Switch pane", keywords: "files diff focus", run: () => setActivePane((pane) => pane === PANE.files ? PANE.diff : PANE.files) },
+    { label: "Switch pane", keywords: "files diff plan focus", run: () => setActivePane((pane) => pane === PANE.files ? PANE.diff : pane === PANE.diff && planOpen() ? PANE.plan : PANE.files) },
     { label: "Quit OpenDiff", keywords: "exit close", run: () => renderer.destroy() },
   ]
 
@@ -447,7 +478,16 @@ function App() {
       key.preventDefault()
       key.stopPropagation()
       setSelectionAnchor()
-      setActivePane((pane) => pane === PANE.files ? PANE.diff : PANE.files)
+      setActivePane((pane) => pane === PANE.files ? PANE.diff : pane === PANE.diff && planOpen() ? PANE.plan : PANE.files)
+      return
+    }
+    if (pressed(KEYBINDS.togglePlan)) {
+      togglePlanSidebar()
+      return
+    }
+    if (activePane() === PANE.plan && pressed(KEYBINDS.toggleTask)) {
+      const selectedPlan = plan()?.prs[selectedPr()]
+      if (selectedPlan) void togglePlanTask(result().location.directory, selectedPlan, selectedTask()).then(() => refresh())
       return
     }
     if (activePane() === PANE.files && pressed(KEYBINDS.select)) {
@@ -460,8 +500,10 @@ function App() {
         setSelected((index) => Math.min(index + 1, Math.max(result().data.length - 1, 0)))
         setSelectedDiffLine(0)
         setSelectionAnchor()
-      } else {
+      } else if (activePane() === PANE.diff) {
         setSelectedDiffLine((line) => moveDiffSelection(diff, line, 1))
+      } else {
+        setSelectedTask((index) => Math.min(index + 1, Math.max((plan()?.prs[selectedPr()]?.tasks.length ?? 1) - 1, 0)))
       }
     }
     if (pressed(KEYBINDS.up)) {
@@ -470,8 +512,10 @@ function App() {
         setSelected((index) => Math.max(index - 1, 0))
         setSelectedDiffLine(0)
         setSelectionAnchor()
-      } else {
+      } else if (activePane() === PANE.diff) {
         setSelectedDiffLine((line) => moveDiffSelection(diff, line, -1))
+      } else {
+        setSelectedTask((index) => Math.max(index - 1, 0))
       }
     }
     if (pressed(KEYBINDS.pageDown)) {
@@ -480,8 +524,10 @@ function App() {
         setSelected((index) => Math.min(index + halfPage(), Math.max(result().data.length - 1, 0)))
         setSelectedDiffLine(0)
         setSelectionAnchor()
-      } else {
+      } else if (activePane() === PANE.diff) {
         setSelectedDiffLine((line) => moveDiffSelectionByVisualRows(diff, line, halfPage()))
+      } else {
+        setSelectedTask((index) => Math.min(index + halfPage(), Math.max((plan()?.prs[selectedPr()]?.tasks.length ?? 1) - 1, 0)))
       }
     }
     if (pressed(KEYBINDS.pageUp)) {
@@ -490,8 +536,10 @@ function App() {
         setSelected((index) => Math.max(index - halfPage(), 0))
         setSelectedDiffLine(0)
         setSelectionAnchor()
-      } else {
+      } else if (activePane() === PANE.diff) {
         setSelectedDiffLine((line) => moveDiffSelectionByVisualRows(diff, line, -halfPage()))
+      } else {
+        setSelectedTask((index) => Math.max(index - halfPage(), 0))
       }
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.nextChange)) {
@@ -499,6 +547,14 @@ function App() {
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.previousChange)) {
       setSelectedDiffLine((line) => moveToChange(diff, current()?.patch ?? "", view(), line, -1))
+    }
+    if (activePane() === PANE.plan && pressed(KEYBINDS.nextChange)) {
+      setSelectedPr((index) => Math.min(index + 1, Math.max((plan()?.prs.length ?? 1) - 1, 0)))
+      setSelectedTask(0)
+    }
+    if (activePane() === PANE.plan && pressed(KEYBINDS.previousChange)) {
+      setSelectedPr((index) => Math.max(index - 1, 0))
+      setSelectedTask(0)
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.visual)) {
       setSelectionAnchor((anchor) => anchor === undefined ? selectedDiffLine() : undefined)
@@ -585,32 +641,43 @@ function App() {
         </text>
       </box>
 
-      {result().data.length === 0 ? (
-        <box flexGrow={1} alignItems="center" justifyContent="center">
-          <text fg={COLORS.textMuted}>No {mode()} changes</text>
-        </box>
-      ) : (
-        <box flexDirection="row" flexGrow={1}>
-          <FileTree
-            active={activePane() === PANE.files}
-            files={result().data}
-            selected={selected()}
-            onReady={(element) => (fileList = element)}
+      <box flexDirection="row" flexGrow={1}>
+        {result().data.length === 0 ? (
+          <box flexGrow={1} alignItems="center" justifyContent="center">
+            <text fg={COLORS.textMuted}>No {mode()} changes</text>
+          </box>
+        ) : (
+          <box flexDirection="row" flexGrow={1}>
+            <FileTree
+              active={activePane() === PANE.files}
+              files={result().data}
+              selected={selected()}
+              onReady={(element) => (fileList = element)}
+            />
+            <DiffPane
+              activePane={activePane()}
+              file={current()}
+              view={view()}
+              wrap={wrap()}
+              onReady={(element) => {
+                diff = element
+                const line = selectedDiffLine()
+                highlightDiffRange(diff, selectionAnchor() ?? line, line, COLORS.selection)
+                markDiffComments(diff, commentsVisible() ? currentComments() : [], COLORS.comment)
+              }}
+            />
+          </box>
+        )}
+        <Show when={planOpen()}>
+          <PlanSidebar
+            active={activePane() === PANE.plan}
+            plan={plan()}
+            selectedPr={selectedPr()}
+            selectedTask={selectedTask()}
+            onReady={(element) => (taskList = element)}
           />
-          <DiffPane
-            activePane={activePane()}
-            file={current()}
-            view={view()}
-            wrap={wrap()}
-            onReady={(element) => {
-              diff = element
-              const line = selectedDiffLine()
-              highlightDiffRange(diff, selectionAnchor() ?? line, line, COLORS.selection)
-              markDiffComments(diff, commentsVisible() ? currentComments() : [], COLORS.comment)
-            }}
-          />
-        </box>
-      )}
+        </Show>
+      </box>
 
       <Footer context={footerContext()} />
       <Show when={submittingComments()}>
