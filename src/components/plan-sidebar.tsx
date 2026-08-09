@@ -13,12 +13,18 @@ type PlanSidebarProps = {
 }
 
 export function PlanSidebar(props: PlanSidebarProps) {
+  let prList: ScrollBoxRenderable | undefined
   let taskList: ScrollBoxRenderable | undefined
   const current = () => props.plan?.prs[props.selectedPr]
   const totals = () => {
     const tasks = props.plan?.prs.flatMap((pr) => pr.tasks) ?? []
     return { complete: tasks.filter((task) => task.complete).length, total: tasks.length }
   }
+
+  createEffect(() => {
+    if (!props.plan?.prs[props.selectedPr]) return
+    prList?.scrollChildIntoView(`pr-${props.selectedPr}`)
+  })
 
   createEffect(() => {
     if (!current()?.tasks[props.selectedTask]) return
@@ -41,14 +47,25 @@ export function PlanSidebar(props: PlanSidebarProps) {
       }>
         {(plan) => (
           <>
-            <box flexDirection="column" paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
-              <text fg={COLORS.textStrong}><b>{plan().title}</b></text>
-              <text fg={COLORS.textMuted}>{totals().complete}/{totals().total} tasks complete</text>
+            <box height={2} flexShrink={0} flexDirection="column" paddingLeft={1} paddingRight={1} backgroundColor={COLORS.panel}>
+              <text height={1} fg={COLORS.textStrong}><b>{plan().title}</b></text>
+              <text height={1} fg={COLORS.textMuted}>{totals().complete}/{totals().total} tasks complete</text>
             </box>
-            <box flexDirection="column" paddingTop={1} paddingBottom={1}>
+            <scrollbox
+              ref={(element) => (prList = element)}
+              height="35%"
+              minHeight={3}
+              flexShrink={0}
+              scrollX={false}
+              scrollY
+              paddingTop={1}
+              paddingBottom={1}
+            >
               <For each={plan().prs}>
                 {(pr, index) => (
                   <text
+                    id={`pr-${index()}`}
+                    height={1}
                     fg={props.selectedPr === index() ? COLORS.textStrong : COLORS.textMuted}
                     bg={props.selectedPr === index() ? props.active && props.focusedSection === "prs" ? COLORS.selection : COLORS.panel : COLORS.canvas}
                   >
@@ -56,9 +73,9 @@ export function PlanSidebar(props: PlanSidebarProps) {
                   </text>
                 )}
               </For>
-            </box>
-            <box height={1} paddingLeft={1} backgroundColor={COLORS.panel}>
-              <text fg={COLORS.text}>{current()?.branch || current()?.title}</text>
+            </scrollbox>
+            <box height={1} flexShrink={0} paddingLeft={1} backgroundColor={COLORS.panel}>
+              <text height={1} fg={COLORS.text}>{current()?.branch || current()?.title}</text>
             </box>
             <scrollbox
               ref={(element) => {
