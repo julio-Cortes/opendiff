@@ -78,6 +78,7 @@ function App() {
   let diff: DiffRenderable | undefined
   let taskList: ScrollBoxRenderable | undefined
   let paletteList: ScrollBoxRenderable | undefined
+  let commentThread: ScrollBoxRenderable | undefined
   let commentEditor: TextareaRenderable | undefined
   let editing = false
   const [result, setResult] = createSignal(initialResult)
@@ -479,6 +480,10 @@ function App() {
       queueMicrotask(() => setPaletteVisible(true))
       return
     }
+    if (session() && pressed(KEYBINDS.sendComments)) {
+      void submitComments()
+      return
+    }
     if (commentListVisible()) {
       if (key.name === "escape" || pressed(KEYBINDS.listComments)) setCommentListVisible(false)
       if (pressed(KEYBINDS.down)) {
@@ -513,6 +518,32 @@ function App() {
         }
       }
       return
+    }
+    if (openedComment() && commentsVisible()) {
+      if (pressed(KEYBINDS.down)) {
+        key.preventDefault()
+        key.stopPropagation()
+        commentThread?.scrollBy(1 / 5, "viewport")
+        return
+      }
+      if (pressed(KEYBINDS.up)) {
+        key.preventDefault()
+        key.stopPropagation()
+        commentThread?.scrollBy(-1 / 5, "viewport")
+        return
+      }
+      if (pressed(KEYBINDS.pageDown)) {
+        key.preventDefault()
+        key.stopPropagation()
+        commentThread?.scrollBy(1 / 2, "viewport")
+        return
+      }
+      if (pressed(KEYBINDS.pageUp)) {
+        key.preventDefault()
+        key.stopPropagation()
+        commentThread?.scrollBy(-1 / 2, "viewport")
+        return
+      }
     }
     if (selectionAnchor() !== undefined && key.name === "escape") {
       setSelectionAnchor()
@@ -689,9 +720,6 @@ function App() {
     if (commentsVisible() && pressed(KEYBINDS.deleteComment)) {
       const target = displayedComments()[0]
       if (target) deleteComment(target)
-    }
-    if (pressed(KEYBINDS.sendComments)) {
-      void submitComments()
     }
     if (pressed(KEYBINDS.refresh)) {
       void refresh()
@@ -1016,12 +1044,19 @@ function App() {
           maxHeight={16}
           padding={1}
           flexDirection="column"
+          overflow="hidden"
           borderStyle="single"
           borderColor={COLORS.comment}
           backgroundColor={COLORS.panel}
         >
-          <text fg={COLORS.textStrong}><b>Review comments</b></text>
-          <scrollbox flexGrow={1} scrollX={false} scrollY>
+          <text flexShrink={0} fg={COLORS.textStrong}><b>Review comments</b></text>
+          <scrollbox
+            ref={(element) => (commentThread = element)}
+            flexGrow={1}
+            overflow="hidden"
+            scrollX={false}
+            scrollY
+          >
             <For each={displayedComments()}>
               {(comment) => (
                 <box flexDirection="column" marginBottom={1}>
@@ -1057,7 +1092,7 @@ function App() {
               )}
             </For>
           </scrollbox>
-          <text fg={COLORS.textMuted}>f reply  esc hide</text>
+          <text flexShrink={0} fg={COLORS.textMuted}>j/k scroll  C-d/C-u page  f reply  esc hide</text>
         </box>
       </Show>
       </box>
