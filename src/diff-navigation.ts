@@ -341,6 +341,11 @@ function getChangeOffsets(patch: string, view: DiffView) {
   return offsets
 }
 
+export function getBoundaryChange(patch: string, view: DiffView, direction: -1 | 1) {
+  const offsets = getChangeOffsets(patch, view)
+  return direction === 1 ? offsets[0] : offsets.at(-1)
+}
+
 export function moveToChange(
   diff: DiffRenderable | undefined,
   patch: string,

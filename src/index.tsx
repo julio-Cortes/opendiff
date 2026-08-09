@@ -26,6 +26,7 @@ import {
   type Pane,
 } from "./config"
 import {
+  getBoundaryChange,
   getDiffSnippet,
   getDiffLineNumber,
   highlightDiffRange,
@@ -269,6 +270,23 @@ function App() {
   const toggleFileTree = () => {
     if (fileTreeOpen() && activePane() === PANE.files) setActivePane(PANE.diff)
     setFileTreeOpen((open) => !open)
+  }
+
+  const moveToDiffChange = (direction: -1 | 1) => {
+    const line = selectedDiffLine()
+    const target = moveToChange(diff, current()?.patch ?? "", view(), line, direction)
+    if (target !== line) {
+      setSelectedDiffLine(target)
+      return
+    }
+
+    const fileIndex = selected() + direction
+    const file = result().data[fileIndex]
+    if (!file) return
+    setOpenedComment()
+    setSelectionAnchor()
+    setSelected(fileIndex)
+    setSelectedDiffLine(getBoundaryChange(file.patch, view(), direction) ?? 0)
   }
 
   const recordError = (context: string, error: unknown) => {
@@ -612,10 +630,10 @@ function App() {
       }
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.nextChange)) {
-      setSelectedDiffLine((line) => moveToChange(diff, current()?.patch ?? "", view(), line, 1))
+      moveToDiffChange(1)
     }
     if (activePane() === PANE.diff && pressed(KEYBINDS.previousChange)) {
-      setSelectedDiffLine((line) => moveToChange(diff, current()?.patch ?? "", view(), line, -1))
+      moveToDiffChange(-1)
     }
     if (activePane() === PANE.plan && pressed(KEYBINDS.nextChange)) {
       setSelectedPr((index) => Math.min(index + 1, Math.max((plan()?.prs.length ?? 1) - 1, 0)))
