@@ -16,6 +16,7 @@ import {
   DIFF_MODE,
   DIFF_VIEW,
   DIFF_WRAP,
+  formatKeybind,
   KEYBINDS,
   PANE,
   type DiffMode,
@@ -60,6 +61,7 @@ type CommentDraft = Omit<ReviewComment, "id" | "body" | "status" | "replies">
 type PaletteCommand = {
   label: string
   keywords: string
+  keybind?: readonly Keybind[]
   run: () => void
 }
 
@@ -74,6 +76,7 @@ function App() {
   let fileList: ScrollBoxRenderable | undefined
   let diff: DiffRenderable | undefined
   let taskList: ScrollBoxRenderable | undefined
+  let paletteList: ScrollBoxRenderable | undefined
   let commentEditor: TextareaRenderable | undefined
   let editing = false
   const [result, setResult] = createSignal(initialResult)
@@ -93,6 +96,8 @@ function App() {
   const [paletteVisible, setPaletteVisible] = createSignal(false)
   const [paletteQuery, setPaletteQuery] = createSignal("")
   const [paletteIndex, setPaletteIndex] = createSignal(0)
+  const [errorLog, setErrorLog] = createSignal<string[]>([])
+  const [errorLogVisible, setErrorLogVisible] = createSignal(false)
   const [submittingComments, setSubmittingComments] = createSignal(false)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
@@ -113,6 +118,7 @@ function App() {
   const footerContext = () => {
     if (submittingComments()) return "loading" as const
     if (commentDraft() || editingComment() || replyingComment()) return "comment-editor" as const
+    if (errorLogVisible()) return "error-log" as const
     if (paletteVisible()) return "command-palette" as const
     if (commentListVisible()) return "comment-list" as const
     if (commentsVisible() && displayedComments().length > 0) return "thread" as const
@@ -250,22 +256,28 @@ function App() {
     setPlanOpen(true)
   }
 
+  const recordError = (context: string, error: unknown) => {
+    const detail = error instanceof Error ? error.stack ?? error.message : String(error)
+    setErrorLog((current) => [...current, `${new Date().toISOString()} ${context}\n${detail}`])
+  }
+
   const paletteCommands = (): PaletteCommand[] => [
-    { label: "Refresh diff", keywords: "reload changes", run: () => void refresh() },
-    { label: `Switch to ${mode() === DIFF_MODE.working ? "branch" : "working"} diff`, keywords: "mode branch working", run: () => void refresh(mode() === DIFF_MODE.working ? DIFF_MODE.branch : DIFF_MODE.working) },
-    { label: `Switch to ${view() === DIFF_VIEW.unified ? "split" : "unified"} view`, keywords: "layout diff view", run: toggleView },
-    { label: `${wrap() === DIFF_WRAP.none ? "Enable" : "Disable"} line wrapping`, keywords: "wrap lines", run: toggleWrap },
-    { label: "Toggle comment markers", keywords: "show hide comments", run: () => setCommentsVisible((visible) => !visible) },
-    { label: "Open all comments", keywords: "review list panel", run: () => setCommentListVisible(true) },
-    { label: "Reply to open thread", keywords: "follow up respond comment", run: () => {
+    { label: "Refresh diff", keywords: "reload changes", keybind: KEYBINDS.refresh, run: () => void refresh() },
+    { label: `Switch to ${mode() === DIFF_MODE.working ? "branch" : "working"} diff`, keywords: "mode branch working", keybind: KEYBINDS.toggleMode, run: () => void refresh(mode() === DIFF_MODE.working ? DIFF_MODE.branch : DIFF_MODE.working) },
+    { label: `Switch to ${view() === DIFF_VIEW.unified ? "split" : "unified"} view`, keywords: "layout diff view", keybind: KEYBINDS.toggleView, run: toggleView },
+    { label: `${wrap() === DIFF_WRAP.none ? "Enable" : "Disable"} line wrapping`, keywords: "wrap lines", keybind: KEYBINDS.toggleWrap, run: toggleWrap },
+    { label: "Toggle comment markers", keywords: "show hide comments", keybind: KEYBINDS.comments, run: () => setCommentsVisible((visible) => !visible) },
+    { label: "Open all comments", keywords: "review list panel", keybind: KEYBINDS.listComments, run: () => setCommentListVisible(true) },
+    { label: "Reply to open thread", keywords: "follow up respond comment", keybind: KEYBINDS.replyThread, run: () => {
       const target = displayedComments()[0]
       if (target && commentsVisible()) queueMicrotask(() => setReplyingComment(target))
     } },
-    { label: "Send draft comments", keywords: "agent submit review", run: () => void submitComments() },
-    { label: `${planOpen() ? "Hide" : "Show"} feature plan`, keywords: "sidebar tasks PR stack", run: togglePlanSidebar },
-    { label: "Edit current file", keywords: "editor open", run: () => void edit() },
-    { label: "Switch pane", keywords: "files diff plan focus", run: () => setActivePane((pane) => pane === PANE.files ? PANE.diff : pane === PANE.diff && planOpen() ? PANE.plan : PANE.files) },
-    { label: "Quit OpenDiff", keywords: "exit close", run: () => renderer.destroy() },
+    { label: "Send draft comments", keywords: "agent submit review", keybind: KEYBINDS.sendComments, run: () => void submitComments() },
+    { label: `View error log (${errorLog().length})`, keywords: "errors diagnostics failures", run: () => setErrorLogVisible(true) },
+    { label: `${planOpen() ? "Hide" : "Show"} feature plan`, keywords: "sidebar tasks PR stack", keybind: KEYBINDS.togglePlan, run: togglePlanSidebar },
+    { label: "Edit current file", keywords: "editor open", keybind: KEYBINDS.edit, run: () => void edit() },
+    { label: "Switch pane", keywords: "files diff plan focus", keybind: KEYBINDS.switchPane, run: () => setActivePane((pane) => pane === PANE.files ? PANE.diff : pane === PANE.diff && planOpen() ? PANE.plan : PANE.files) },
+    { label: "Quit OpenDiff", keywords: "exit close", keybind: KEYBINDS.quit, run: () => renderer.destroy() },
   ]
 
   const filteredPaletteCommands = () => {
@@ -273,6 +285,11 @@ function App() {
     if (!query) return paletteCommands()
     return paletteCommands().filter((command) => `${command.label} ${command.keywords}`.toLowerCase().includes(query))
   }
+
+  createEffect(() => {
+    if (!paletteVisible() || !filteredPaletteCommands()[paletteIndex()]) return
+    paletteList?.scrollChildIntoView(`palette-command-${paletteIndex()}`)
+  })
 
   const runPaletteCommand = () => {
     const command = filteredPaletteCommands()[paletteIndex()]
@@ -330,13 +347,8 @@ function App() {
       if (openedComment()?.id === target.id) setOpenedComment(answeredTarget)
       await saveReviewComments(result().location.directory, selectedSession.id, answered)
       await refresh()
-    } catch {
-      setComments((current) => {
-        const restored = current.map((comment) => comment.id === target.id ? target : comment)
-        void saveReviewComments(result().location.directory, selectedSession.id, restored)
-        return restored
-      })
-      if (openedComment()?.id === target.id) setOpenedComment(target)
+    } catch (error) {
+      recordError("Failed to submit thread reply", error)
     } finally {
       setSubmittingComments(false)
     }
@@ -369,13 +381,8 @@ function App() {
       setComments(answered)
       await saveReviewComments(result().location.directory, selectedSession.id, answered)
       await refresh()
-    } catch {
-      const draftsByID = new Map(drafts.map((comment) => [comment.id, comment]))
-      setComments((current) => {
-        const restored = current.map((comment) => draftsByID.get(comment.id) ?? comment)
-        void saveReviewComments(result().location.directory, selectedSession.id, restored)
-        return restored
-      })
+    } catch (error) {
+      recordError("Failed to submit review comments", error)
     } finally {
       setSubmittingComments(false)
     }
@@ -408,6 +415,10 @@ function App() {
         setEditingComment()
         setReplyingComment()
       }
+      return
+    }
+    if (errorLogVisible()) {
+      if (key.name === "escape") setErrorLogVisible(false)
       return
     }
     if (paletteVisible()) {
@@ -700,6 +711,42 @@ function App() {
       </box>
 
       <Footer context={footerContext()} />
+      <Show when={errorLogVisible()}>
+        <box
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <box
+            width="80%"
+            height="70%"
+            padding={1}
+            flexDirection="column"
+            borderStyle="single"
+            borderColor={COLORS.removed}
+            backgroundColor={COLORS.panel}
+          >
+            <text fg={COLORS.textStrong}><b>Error log</b></text>
+            <text fg={COLORS.textMuted}>{errorLog().length} errors</text>
+            <scrollbox flexGrow={1} scrollX={false} scrollY>
+              <Show when={errorLog().length > 0} fallback={<text fg={COLORS.textMuted}>No errors recorded</text>}>
+                <For each={errorLog()}>
+                  {(error) => (
+                    <box marginTop={1} paddingLeft={1} border={["left"]} borderStyle="single" borderColor={COLORS.removed}>
+                      <text fg={COLORS.text}>{error}</text>
+                    </box>
+                  )}
+                </For>
+              </Show>
+            </scrollbox>
+            <text fg={COLORS.textMuted}>esc close</text>
+          </box>
+        </box>
+      </Show>
       <Show when={submittingComments()}>
         <box
           position="absolute"
@@ -762,21 +809,33 @@ function App() {
                 setPaletteIndex(0)
               }}
             />
-            <box flexDirection="column" marginTop={1}>
+            <scrollbox
+              ref={(element) => (paletteList = element)}
+              flexGrow={1}
+              marginTop={1}
+              scrollX={false}
+              scrollY
+            >
               <Show when={filteredPaletteCommands().length > 0} fallback={<text fg={COLORS.textMuted}>No matching commands</text>}>
                 <For each={filteredPaletteCommands()}>
                   {(command, index) => (
                     <box
+                      id={`palette-command-${index()}`}
                       height={1}
                       paddingLeft={1}
+                      paddingRight={1}
                       backgroundColor={index() === paletteIndex() ? COLORS.selection : COLORS.panel}
                     >
                       <text fg={COLORS.text}>{command.label}</text>
+                      <box flexGrow={1} />
+                      <Show when={command.keybind}>
+                        {(keybind) => <text fg={index() === paletteIndex() ? COLORS.text : COLORS.textMuted}>{keybind().map(formatKeybind).join("/")}</text>}
+                      </Show>
                     </box>
                   )}
                 </For>
               </Show>
-            </box>
+            </scrollbox>
           </box>
         </box>
       </Show>
