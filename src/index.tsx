@@ -63,6 +63,12 @@ type PaletteCommand = {
   run: () => void
 }
 
+const nextCommentID = (comments: ReviewComment[]) => String(comments.reduce((highest, comment) => {
+  if (!/^\d+$/.test(comment.id)) return highest
+  const id = Number.parseInt(comment.id, 10)
+  return Math.max(highest, id)
+}, 0) + 1)
+
 function App() {
   const renderer = useRenderer()
   let fileList: ScrollBoxRenderable | undefined
@@ -188,7 +194,7 @@ function App() {
     setComments((current) => {
       const next = [...current, {
         ...draft,
-        id: crypto.randomUUID(),
+        id: nextCommentID(current),
         body: text,
         status: "draft",
         replies: [],
@@ -278,7 +284,7 @@ function App() {
 
   const requestAgentReplies = async (sessionID: string, prompt: string) => {
     const pending = await client.session.prompt({ sessionID, text: prompt })
-    await client.session.wait({ sessionID })
+    await client.session.wait({ sessionID }).catch(() => undefined)
     const messages = await client.message.list({ sessionID, order: "desc", limit: 20 })
     const response = messages.data.find((message) =>
       message.type === "assistant" && message.time.created >= pending.timeCreated
@@ -324,6 +330,13 @@ function App() {
       if (openedComment()?.id === target.id) setOpenedComment(answeredTarget)
       await saveReviewComments(result().location.directory, selectedSession.id, answered)
       await refresh()
+    } catch {
+      setComments((current) => {
+        const restored = current.map((comment) => comment.id === target.id ? target : comment)
+        void saveReviewComments(result().location.directory, selectedSession.id, restored)
+        return restored
+      })
+      if (openedComment()?.id === target.id) setOpenedComment(target)
     } finally {
       setSubmittingComments(false)
     }
@@ -356,6 +369,13 @@ function App() {
       setComments(answered)
       await saveReviewComments(result().location.directory, selectedSession.id, answered)
       await refresh()
+    } catch {
+      const draftsByID = new Map(drafts.map((comment) => [comment.id, comment]))
+      setComments((current) => {
+        const restored = current.map((comment) => draftsByID.get(comment.id) ?? comment)
+        void saveReviewComments(result().location.directory, selectedSession.id, restored)
+        return restored
+      })
     } finally {
       setSubmittingComments(false)
     }
