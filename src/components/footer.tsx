@@ -9,8 +9,8 @@ type FooterProps = {
 const key = (binding: keyof typeof KEYBINDS) => formatKeybind(KEYBINDS[binding][0])
 
 const HELP: Record<FooterContext, string> = {
-  diff: `${key("previousPane")}/${key("nextPane")} pane  ${key("down")}/${key("up")} navigate  ${key("visual")} select  ${key("comment")} comment  ${key("editComment")} edit comment  ${key("comments")} markers  ${key("listComments")} list  ${key("sendComments")} send  ${key("togglePlan")} plan  ${key("commandPalette")} commands  ${key("quit")} quit`,
-  files: `${key("previousPane")}/${key("nextPane")} pane  ${key("down")}/${key("up")} navigate  ${key("select")} open  ${key("listComments")} comments  ${key("togglePlan")} plan  ${key("commandPalette")} commands  ${key("quit")} quit`,
+  diff: `${key("previousPane")}/${key("nextPane")} pane  ${key("down")}/${key("up")} navigate  ${key("visual")} select  ${key("comment")} comment  ${key("editComment")} edit comment  ${key("comments")} markers  ${key("listComments")} list  ${key("sendComments")} send  ${key("toggleFileTree")} files  ${key("togglePlan")} plan  ${key("commandPalette")} commands  ${key("quit")} quit`,
+  files: `${key("previousPane")}/${key("nextPane")} pane  ${key("down")}/${key("up")} navigate  ${key("select")} open  ${key("listComments")} comments  ${key("toggleFileTree")} hide  ${key("togglePlan")} plan  ${key("commandPalette")} commands  ${key("quit")} quit`,
   plan: `${key("previousPane")}/${key("nextPane")} pane  ${key("switchSection")} section  ${key("down")}/${key("up")} navigate  ${key("toggleTask")} toggle  ${key("edit")} edit  ${key("togglePlan")} close`,
   thread: `${key("replyThread")} reply  ${key("deleteComment")} delete  esc hide`,
   "comment-editor": "enter submit  S-enter newline  esc cancel",

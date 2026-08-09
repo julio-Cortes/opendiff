@@ -88,6 +88,7 @@ export const KEYBINDS = {
   select: [{ name: "return" }],
   switchSection: [{ name: "tab" }],
   toggleMode: [{ name: "b" }],
+  toggleFileTree: [{ name: "t" }],
   toggleView: [{ name: "s" }],
   toggleWrap: [{ name: "w" }],
   togglePlan: [{ name: "p" }],

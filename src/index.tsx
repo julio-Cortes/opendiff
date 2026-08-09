@@ -100,6 +100,7 @@ function App() {
   const [errorLogVisible, setErrorLogVisible] = createSignal(false)
   const [submittingComments, setSubmittingComments] = createSignal(false)
   const [activePane, setActivePane] = createSignal<Pane>(PANE.diff)
+  const [fileTreeOpen, setFileTreeOpen] = createSignal(true)
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
   const [view, setView] = createSignal<DiffView>(initialSettings.view)
   const [wrap, setWrap] = createSignal<DiffWrap>(initialSettings.wrap)
@@ -260,9 +261,14 @@ function App() {
   const movePane = (direction: -1 | 1) => {
     setSelectionAnchor()
     setActivePane((pane) => {
-      if (direction === -1) return pane === PANE.plan ? PANE.diff : pane === PANE.diff ? PANE.files : pane
+      if (direction === -1) return pane === PANE.plan ? PANE.diff : pane === PANE.diff && fileTreeOpen() ? PANE.files : pane
       return pane === PANE.files ? PANE.diff : pane === PANE.diff && planOpen() ? PANE.plan : pane
     })
+  }
+
+  const toggleFileTree = () => {
+    if (fileTreeOpen() && activePane() === PANE.files) setActivePane(PANE.diff)
+    setFileTreeOpen((open) => !open)
   }
 
   const recordError = (context: string, error: unknown) => {
@@ -284,6 +290,7 @@ function App() {
     { label: "Send draft comments", keywords: "agent submit review", keybind: KEYBINDS.sendComments, run: () => void submitComments() },
     { label: `View error log (${errorLog().length})`, keywords: "errors diagnostics failures", run: () => setErrorLogVisible(true) },
     { label: `${planOpen() ? "Hide" : "Show"} feature plan`, keywords: "sidebar tasks PR stack", keybind: KEYBINDS.togglePlan, run: togglePlanSidebar },
+    { label: `${fileTreeOpen() ? "Hide" : "Show"} file tree`, keywords: "sidebar files", keybind: KEYBINDS.toggleFileTree, run: toggleFileTree },
     { label: "Edit current file", keywords: "editor open", keybind: KEYBINDS.edit, run: () => void edit() },
     { label: "Move to previous pane", keywords: "files diff plan focus left", keybind: KEYBINDS.previousPane, run: () => movePane(-1) },
     { label: "Move to next pane", keywords: "files diff plan focus right", keybind: KEYBINDS.nextPane, run: () => movePane(1) },
@@ -537,6 +544,10 @@ function App() {
       togglePlanSidebar()
       return
     }
+    if (pressed(KEYBINDS.toggleFileTree)) {
+      toggleFileTree()
+      return
+    }
     if (activePane() === PANE.plan && pressed(KEYBINDS.toggleTask)) {
       const selectedPlan = plan()?.prs[selectedPr()]
       if (selectedPlan) void togglePlanTask(result().location.directory, selectedPlan, selectedTask()).then(() => refresh())
@@ -706,12 +717,14 @@ function App() {
           </box>
         ) : (
           <box flexDirection="row" flexGrow={1}>
-            <FileTree
-              active={activePane() === PANE.files}
-              files={result().data}
-              selected={selected()}
-              onReady={(element) => (fileList = element)}
-            />
+            <Show when={fileTreeOpen()}>
+              <FileTree
+                active={activePane() === PANE.files}
+                files={result().data}
+                selected={selected()}
+                onReady={(element) => (fileList = element)}
+              />
+            </Show>
             <DiffPane
               activePane={activePane()}
               file={current()}
