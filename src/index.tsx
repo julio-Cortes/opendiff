@@ -107,6 +107,7 @@ function App() {
   const [planOpen, setPlanOpen] = createSignal(false)
   const [selectedPr, setSelectedPr] = createSignal(Math.max(initialPlan?.prs.findIndex((pr) => pr.number === initialPlan.currentPr) ?? 0, 0))
   const [selectedTask, setSelectedTask] = createSignal(0)
+  const [focusedPlanSection, setFocusedPlanSection] = createSignal<"prs" | "tasks">("prs")
   const current = () => result().data[selected()]
   const currentComments = () => comments().filter((comment) =>
     comment.file === current()?.file && comment.patch === current()?.patch
@@ -256,6 +257,14 @@ function App() {
     setPlanOpen(true)
   }
 
+  const movePane = (direction: -1 | 1) => {
+    setSelectionAnchor()
+    setActivePane((pane) => {
+      if (direction === -1) return pane === PANE.plan ? PANE.diff : pane === PANE.diff ? PANE.files : pane
+      return pane === PANE.files ? PANE.diff : pane === PANE.diff && planOpen() ? PANE.plan : pane
+    })
+  }
+
   const recordError = (context: string, error: unknown) => {
     const detail = error instanceof Error ? error.stack ?? error.message : String(error)
     setErrorLog((current) => [...current, `${new Date().toISOString()} ${context}\n${detail}`])
@@ -276,7 +285,8 @@ function App() {
     { label: `View error log (${errorLog().length})`, keywords: "errors diagnostics failures", run: () => setErrorLogVisible(true) },
     { label: `${planOpen() ? "Hide" : "Show"} feature plan`, keywords: "sidebar tasks PR stack", keybind: KEYBINDS.togglePlan, run: togglePlanSidebar },
     { label: "Edit current file", keywords: "editor open", keybind: KEYBINDS.edit, run: () => void edit() },
-    { label: "Switch pane", keywords: "files diff plan focus", keybind: KEYBINDS.switchPane, run: () => setActivePane((pane) => pane === PANE.files ? PANE.diff : pane === PANE.diff && planOpen() ? PANE.plan : PANE.files) },
+    { label: "Move to previous pane", keywords: "files diff plan focus left", keybind: KEYBINDS.previousPane, run: () => movePane(-1) },
+    { label: "Move to next pane", keywords: "files diff plan focus right", keybind: KEYBINDS.nextPane, run: () => movePane(1) },
     { label: "Quit OpenDiff", keywords: "exit close", keybind: KEYBINDS.quit, run: () => renderer.destroy() },
   ]
 
@@ -505,11 +515,22 @@ function App() {
       }
       return
     }
-    if (pressed(KEYBINDS.switchPane)) {
+    if (pressed(KEYBINDS.previousPane)) {
       key.preventDefault()
       key.stopPropagation()
-      setSelectionAnchor()
-      setActivePane((pane) => pane === PANE.files ? PANE.diff : pane === PANE.diff && planOpen() ? PANE.plan : PANE.files)
+      movePane(-1)
+      return
+    }
+    if (pressed(KEYBINDS.nextPane)) {
+      key.preventDefault()
+      key.stopPropagation()
+      movePane(1)
+      return
+    }
+    if (activePane() === PANE.plan && pressed(KEYBINDS.switchSection)) {
+      key.preventDefault()
+      key.stopPropagation()
+      setFocusedPlanSection((section) => section === "prs" ? "tasks" : "prs")
       return
     }
     if (pressed(KEYBINDS.togglePlan)) {
@@ -533,8 +554,11 @@ function App() {
         setSelectionAnchor()
       } else if (activePane() === PANE.diff) {
         setSelectedDiffLine((line) => moveDiffSelection(diff, line, 1))
-      } else {
+      } else if (focusedPlanSection() === "tasks") {
         setSelectedTask((index) => Math.min(index + 1, Math.max((plan()?.prs[selectedPr()]?.tasks.length ?? 1) - 1, 0)))
+      } else {
+        setSelectedPr((index) => Math.min(index + 1, Math.max((plan()?.prs.length ?? 1) - 1, 0)))
+        setSelectedTask(0)
       }
     }
     if (pressed(KEYBINDS.up)) {
@@ -545,8 +569,11 @@ function App() {
         setSelectionAnchor()
       } else if (activePane() === PANE.diff) {
         setSelectedDiffLine((line) => moveDiffSelection(diff, line, -1))
-      } else {
+      } else if (focusedPlanSection() === "tasks") {
         setSelectedTask((index) => Math.max(index - 1, 0))
+      } else {
+        setSelectedPr((index) => Math.max(index - 1, 0))
+        setSelectedTask(0)
       }
     }
     if (pressed(KEYBINDS.pageDown)) {
@@ -705,6 +732,7 @@ function App() {
             plan={plan()}
             selectedPr={selectedPr()}
             selectedTask={selectedTask()}
+            focusedSection={focusedPlanSection()}
             onReady={(element) => (taskList = element)}
           />
         </Show>
@@ -821,13 +849,15 @@ function App() {
                   {(command, index) => (
                     <box
                       id={`palette-command-${index()}`}
+                      width="100%"
                       height={1}
+                      flexDirection="row"
+                      justifyContent="space-between"
                       paddingLeft={1}
                       paddingRight={1}
                       backgroundColor={index() === paletteIndex() ? COLORS.selection : COLORS.panel}
                     >
                       <text fg={COLORS.text}>{command.label}</text>
-                      <box flexGrow={1} />
                       <Show when={command.keybind}>
                         {(keybind) => <text fg={index() === paletteIndex() ? COLORS.text : COLORS.textMuted}>{keybind().map(formatKeybind).join("/")}</text>}
                       </Show>

@@ -8,6 +8,7 @@ type PlanSidebarProps = {
   plan?: FeaturePlan
   selectedPr: number
   selectedTask: number
+  focusedSection: "prs" | "tasks"
   onReady: (taskList: ScrollBoxRenderable) => void
 }
 
@@ -49,7 +50,7 @@ export function PlanSidebar(props: PlanSidebarProps) {
                 {(pr, index) => (
                   <text
                     fg={props.selectedPr === index() ? COLORS.textStrong : COLORS.textMuted}
-                    bg={props.selectedPr === index() ? COLORS.selection : COLORS.canvas}
+                    bg={props.selectedPr === index() ? props.active && props.focusedSection === "prs" ? COLORS.selection : COLORS.panel : COLORS.canvas}
                   >
                     {pr.number}. {pr.title} [{pr.status}]
                   </text>
@@ -74,7 +75,7 @@ export function PlanSidebar(props: PlanSidebarProps) {
                   <text
                     id={`task-${index()}`}
                     fg={props.selectedTask === index() ? COLORS.textStrong : task.complete ? COLORS.textMuted : COLORS.text}
-                    bg={props.selectedTask === index() ? COLORS.selection : COLORS.canvas}
+                    bg={props.selectedTask === index() ? props.active && props.focusedSection === "tasks" ? COLORS.selection : COLORS.panel : COLORS.canvas}
                   >
                     [{task.complete ? "x" : " "}] {task.text}
                   </text>
