@@ -459,6 +459,24 @@ function App() {
     const pressed = (bindings: readonly Keybind[]) =>
       bindings.some((binding) => binding.name === key.name && Boolean(binding.ctrl) === key.ctrl)
 
+    if (pressed(KEYBINDS.edit)) {
+      key.preventDefault()
+      key.stopPropagation()
+      void edit()
+      return
+    }
+    if (pressed(KEYBINDS.nextChange)) {
+      key.preventDefault()
+      key.stopPropagation()
+      moveToDiffChange(1)
+      return
+    }
+    if (pressed(KEYBINDS.previousChange)) {
+      key.preventDefault()
+      key.stopPropagation()
+      moveToDiffChange(-1)
+      return
+    }
     if (commentDraft() || editingComment() || replyingComment()) {
       if (key.name === "escape") {
         setCommentDraft()
@@ -674,20 +692,6 @@ function App() {
         setSelectedTask((index) => Math.max(index - halfPage(), 0))
       }
     }
-    if (activePane() === PANE.diff && pressed(KEYBINDS.nextChange)) {
-      moveToDiffChange(1)
-    }
-    if (activePane() === PANE.diff && pressed(KEYBINDS.previousChange)) {
-      moveToDiffChange(-1)
-    }
-    if (activePane() === PANE.plan && pressed(KEYBINDS.nextChange)) {
-      setSelectedPr((index) => Math.min(index + 1, Math.max((plan()?.prs.length ?? 1) - 1, 0)))
-      setSelectedTask(0)
-    }
-    if (activePane() === PANE.plan && pressed(KEYBINDS.previousChange)) {
-      setSelectedPr((index) => Math.max(index - 1, 0))
-      setSelectedTask(0)
-    }
     if (activePane() === PANE.diff && pressed(KEYBINDS.visual)) {
       setSelectionAnchor((anchor) => anchor === undefined ? selectedDiffLine() : undefined)
     }
@@ -740,9 +744,6 @@ function App() {
     }
     if (pressed(KEYBINDS.toggleMode)) {
       void refresh(mode() === DIFF_MODE.working ? DIFF_MODE.branch : DIFF_MODE.working)
-    }
-    if (pressed(KEYBINDS.edit)) {
-      void edit()
     }
     if (pressed(KEYBINDS.toggleView)) {
       toggleView()
