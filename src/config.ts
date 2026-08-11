@@ -58,7 +58,7 @@ export function applySystemColors(colors: TerminalColors, mode: ThemeMode) {
   const diffAlpha = isDark ? 0.22 : 0.14
 
   Object.assign(COLORS, {
-    canvas: background,
+    canvas: "transparent",
     panel: gray(2),
     border: gray(7),
     text: foreground,
