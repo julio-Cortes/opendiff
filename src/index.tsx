@@ -2,7 +2,7 @@
 
 import { OpenCode } from "@opencode-ai/client"
 import { Service } from "@opencode-ai/client/service"
-import type { DiffRenderable, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
+import { createCliRenderer, type DiffRenderable, ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { render, useKeyboard, useRenderer } from "@opentui/solid"
 import { basename, resolve } from "node:path"
 import { createEffect, createSignal, For, Show } from "solid-js"
@@ -13,6 +13,7 @@ import { PlanSidebar } from "./components/plan-sidebar"
 import { SessionPicker } from "./components/session-picker"
 import {
   COLORS,
+  applySystemColors,
   DIFF_MODE,
   DIFF_VIEW,
   DIFF_WRAP,
@@ -56,6 +57,19 @@ const initialSessions = await client.session.list({
   order: "desc",
 })
 const initialPlan = await loadFeaturePlan(initialResult.location.directory)
+const renderer = await createCliRenderer({ exitOnCtrlC: false })
+try {
+  const palette = await renderer.getPalette({ size: 16 })
+  const background = palette.defaultBackground ?? palette.palette[0]
+  const detectedMode = background ? (() => {
+    const value = Number.parseInt(background.slice(1), 16)
+    const red = (value >> 16) & 255
+    const green = (value >> 8) & 255
+    const blue = value & 255
+    return 0.299 * red + 0.587 * green + 0.114 * blue > 127.5 ? "light" : "dark"
+  })() : "dark"
+  applySystemColors(palette, renderer.themeMode ?? detectedMode)
+} catch {}
 
 type CommentDraft = Omit<ReviewComment, "id" | "body" | "status" | "replies">
 
@@ -1100,4 +1114,4 @@ function App() {
   )
 }
 
-await render(() => <App />, { exitOnCtrlC: false })
+await render(() => <App />, renderer)

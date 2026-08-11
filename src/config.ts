@@ -1,4 +1,5 @@
 import type { FileDiffInfo } from "@opencode-ai/client"
+import { RGBA, rgbToHex, type TerminalColors, type ThemeMode } from "@opentui/core"
 
 export const COLORS = {
   canvas: "#0d1117",
@@ -20,7 +21,64 @@ export const COLORS = {
   syntaxFunction: "#d2a8ff",
   syntaxType: "#ffa657",
   syntaxProperty: "#79c0ff",
-} as const
+}
+
+export function applySystemColors(colors: TerminalColors, mode: ThemeMode) {
+  const background = colors.defaultBackground ?? colors.palette[0]
+  const foreground = colors.defaultForeground ?? colors.palette[7]
+  if (!background || !foreground) return
+
+  const bg = RGBA.fromHex(background)
+  const isDark = mode === "dark"
+  const ansi = (index: number, fallback: string) => colors.palette[index] ?? fallback
+  const mix = (color: string, amount: number) => {
+    const target = RGBA.fromHex(color)
+    return rgbToHex(RGBA.fromValues(
+      bg.r + (target.r - bg.r) * amount,
+      bg.g + (target.g - bg.g) * amount,
+      bg.b + (target.b - bg.b) * amount,
+    ))
+  }
+  const gray = (step: number) => {
+    const amount = step / 12 * 0.4
+    const target = isDark ? 1 : 0
+    return rgbToHex(RGBA.fromValues(
+      bg.r + (target - bg.r) * amount,
+      bg.g + (target - bg.g) * amount,
+      bg.b + (target - bg.b) * amount,
+    ))
+  }
+
+  const red = ansi(1, "#800000")
+  const green = ansi(2, "#008000")
+  const yellow = ansi(3, "#808000")
+  const blue = ansi(4, "#000080")
+  const magenta = ansi(5, "#800080")
+  const cyan = ansi(6, "#008080")
+  const diffAlpha = isDark ? 0.22 : 0.14
+
+  Object.assign(COLORS, {
+    canvas: background,
+    panel: gray(2),
+    border: gray(7),
+    text: foreground,
+    textStrong: foreground,
+    textMuted: gray(10),
+    selection: mix(cyan, isDark ? 0.35 : 0.2),
+    comment: yellow,
+    added: green,
+    removed: red,
+    addedBackground: mix(green, diffAlpha),
+    removedBackground: mix(red, diffAlpha),
+    syntaxKeyword: magenta,
+    syntaxString: green,
+    syntaxComment: gray(10),
+    syntaxNumber: yellow,
+    syntaxFunction: blue,
+    syntaxType: cyan,
+    syntaxProperty: cyan,
+  })
+}
 
 export const LAYOUT = {
   fileTreeWidth: "30%",
