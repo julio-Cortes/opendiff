@@ -380,7 +380,7 @@ function App() {
     try {
       await saveReviewComments(result().location.directory, selectedSession.id, submitted)
       const snippet = target.snippet ?? getDiffSnippet(target.patch, view(), target.start, target.end)
-      const prompt = `Follow up on review comment ${target.id}. Apply requested changes and return only JSON: {"replies":[{"id":"${target.id}","body":"your response"}]}\nFile: ${target.file}\nSelected lines:\n${snippet}\nComment: ${body}`
+      const prompt = `Follow up on review comment ${target.id}. Address the review comment and return only JSON: {"replies":[{"id":"${target.id}","body":"your response"}]}\nFile: ${target.file}\nSelected lines:\n${snippet}\nComment: ${body}`
       const replies = await requestAgentReplies(selectedSession.id, prompt)
       const agentBody = replies.get(target.id)
       if (!agentBody) return
@@ -417,7 +417,7 @@ function App() {
       setComments(submitted)
       await saveReviewComments(result().location.directory, selectedSession.id, submitted)
 
-      const prompt = `Apply these review comments and return only JSON with one reply per ID: {"replies":[{"id":"comment-id","body":"summary"}]}\n\n${drafts.map((comment) => `${comment.id} ${comment.file}\n${comment.snippet ?? getDiffSnippet(comment.patch, view(), comment.start, comment.end)}\nComment: ${comment.body}`).join("\n\n")}`
+      const prompt = `Address these review comments and return only JSON with one reply per ID: {"replies":[{"id":"comment-id","body":"summary"}]}\n\n${drafts.map((comment) => `${comment.id} ${comment.file}\n${comment.snippet ?? getDiffSnippet(comment.patch, view(), comment.start, comment.end)}\nComment: ${comment.body}`).join("\n\n")}`
       const replies = await requestAgentReplies(selectedSession.id, prompt)
       const answered = submitted.map((comment) => {
         const body = replies.get(comment.id)
