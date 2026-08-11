@@ -167,15 +167,15 @@ function App() {
   const edit = async () => {
     const selectedPlan = plan()?.prs[selectedPr()]
     const file = activePane() === PANE.plan ? selectedPlan?.path : current()?.file
-    if (!file || editing) return
+    if (editing) return
 
     editing = true
     renderer.suspend()
     try {
       const editor = process.env.VISUAL || process.env.EDITOR || "vi"
-      const path = resolve(result().location.directory, file)
+      const path = file ? resolve(result().location.directory, file) : result().location.directory
       const taskLine = selectedPlan?.tasks[selectedTask()]?.line
-      const line = activePane() === PANE.plan
+      const line = !file ? undefined : activePane() === PANE.plan
         ? taskLine === undefined ? undefined : taskLine + 1
         : getDiffLineNumber(diff, current()?.patch ?? "", view(), selectedDiffLine())
       const command = [editor]
