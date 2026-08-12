@@ -14,6 +14,7 @@ export type BackendSession = {
   title?: string
   reference: string
   availability: SessionAvailability
+  updatedAt: number
 }
 
 export type SessionBackendAdapter = {

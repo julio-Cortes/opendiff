@@ -23,6 +23,7 @@ export function createOpenCodeBackend(client: Client): SessionBackendAdapter {
         title: session.title,
         reference: session.id,
         availability: SessionAvailability.Live,
+        updatedAt: session.time.updated,
       }))
     },
     async prompt(session, _directory, prompt) {

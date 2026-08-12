@@ -51,13 +51,16 @@ const client = OpenCode.make({
 })
 const sessionBackends: SessionBackendAdapter[] = [createOpenCodeBackend(client), piBackend]
 const sessionBackendByName = new Map(sessionBackends.map((backend) => [backend.backend, backend]))
+const loadSessions = async () => (await Promise.all(
+  sessionBackends.map((backend) => backend.list(process.cwd()))
+)).flat().sort((left, right) => right.updatedAt - left.updatedAt)
 const loadDiff = (mode: DiffMode) => client.vcs.diff({
   location: { directory: process.cwd() },
   mode,
 })
 const initialResult = await loadDiff(DIFF_MODE.working)
 const initialSettings = await loadSettings()
-const initialSessions = (await Promise.all(sessionBackends.map((backend) => backend.list(process.cwd())))).flat()
+const initialSessions = await loadSessions()
 const initialPlan = await loadFeaturePlan(initialResult.location.directory)
 const renderer = await createCliRenderer({ exitOnCtrlC: false })
 try {
@@ -98,6 +101,8 @@ function App() {
   let commentEditor: TextareaRenderable | undefined
   let editing = false
   const [result, setResult] = createSignal(initialResult)
+  const [sessions, setSessions] = createSignal(initialSessions)
+  const [sessionQuery, setSessionQuery] = createSignal("")
   const [sessionIndex, setSessionIndex] = createSignal(0)
   const [session, setSession] = createSignal<(typeof initialSessions)[number]>()
   const [selected, setSelected] = createSignal(0)
@@ -128,6 +133,13 @@ function App() {
   const [selectedTask, setSelectedTask] = createSignal(0)
   const [focusedPlanSection, setFocusedPlanSection] = createSignal<"prs" | "tasks">("prs")
   const current = () => result().data[selected()]
+  const filteredSessions = () => {
+    const query = sessionQuery().trim().toLowerCase()
+    if (!query) return sessions()
+    return sessions().filter((candidate) =>
+      `${candidate.backend} ${candidate.availability} ${candidate.title ?? ""} ${candidate.id}`.toLowerCase().includes(query)
+    )
+  }
   const currentComments = () => comments().filter((comment) =>
     comment.file === current()?.file && comment.patch === current()?.patch
   )
@@ -236,6 +248,25 @@ function App() {
     const repository = result().location.directory
     setComments(await loadReviewComments(repository, selectedSession.id))
     setSession(selectedSession)
+  }
+
+  const refreshSessions = async () => {
+    const selectedSession = filteredSessions()[sessionIndex()]
+    const next = await loadSessions()
+    const query = sessionQuery().trim().toLowerCase()
+    const nextFiltered = query ? next.filter((candidate) =>
+      `${candidate.backend} ${candidate.availability} ${candidate.title ?? ""} ${candidate.id}`.toLowerCase().includes(query)
+    ) : next
+    setSessions(next)
+    setSessionIndex((index) => {
+      if (selectedSession) {
+        const matchingIndex = nextFiltered.findIndex((candidate) =>
+          candidate.backend === selectedSession.backend && candidate.id === selectedSession.id
+        )
+        if (matchingIndex >= 0) return matchingIndex
+      }
+      return Math.min(index, Math.max(nextFiltered.length - 1, 0))
+    })
   }
 
   const deleteComment = (target: ReviewComment) => {
@@ -576,19 +607,27 @@ function App() {
       setOpenedComment()
       return
     }
-    if (pressed(KEYBINDS.quit)) {
+    if (session() ? pressed(KEYBINDS.quit) : pressed(KEYBINDS.quitSessionPicker)) {
       renderer.destroy()
       return
     }
     if (!session()) {
-      if (pressed(KEYBINDS.down)) {
-        setSessionIndex((index) => Math.min(index + 1, Math.max(initialSessions.length - 1, 0)))
+      if (pressed(KEYBINDS.refreshSessions)) {
+        key.preventDefault()
+        void refreshSessions()
+        return
       }
-      if (pressed(KEYBINDS.up)) {
+      if (key.name === "down") {
+        key.preventDefault()
+        setSessionIndex((index) => Math.min(index + 1, Math.max(filteredSessions().length - 1, 0)))
+      }
+      if (key.name === "up") {
+        key.preventDefault()
         setSessionIndex((index) => Math.max(index - 1, 0))
       }
       if (pressed(KEYBINDS.select)) {
-        const selectedSession = initialSessions[sessionIndex()]
+        key.preventDefault()
+        const selectedSession = filteredSessions()[sessionIndex()]
         if (selectedSession) void selectSession(selectedSession)
       }
       return
@@ -755,8 +794,13 @@ function App() {
       fallback={
         <SessionPicker
           directory={process.cwd()}
-          sessions={initialSessions}
+          sessions={filteredSessions()}
           selected={sessionIndex()}
+          query={sessionQuery()}
+          onQuery={(query) => {
+            setSessionQuery(query)
+            setSessionIndex(0)
+          }}
         />
       }
     >

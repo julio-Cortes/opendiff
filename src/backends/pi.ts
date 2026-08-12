@@ -52,9 +52,11 @@ type SessionEntry = {
   id?: string
   cwd?: string
   name?: string
+  timestamp?: string
   message?: {
     role?: string
     content?: string | Array<{ type?: string; text?: string }>
+    timestamp?: number
   }
 }
 
@@ -81,12 +83,17 @@ async function listStoredSessions(directory: string) {
       const firstMessage = entries.find((entry) =>
         entry.type === SESSION_ENTRY.message && entry.message?.role === MESSAGE_ROLE.user
       )
+      const updatedAt = entries.reduce((latest, entry) => Math.max(
+        latest,
+        entry.message?.timestamp ?? (entry.timestamp ? Date.parse(entry.timestamp) : 0),
+      ), 0)
       return {
         backend: SessionBackend.Pi,
         id: header.id,
         title: name ?? (messageText(firstMessage).split(RECORD_SEPARATOR)[0].slice(0, SESSION_TITLE_LENGTH) || undefined),
         reference: path,
         availability: SessionAvailability.Stored,
+        updatedAt,
       }
     }))
   return sessions.filter((session): session is BackendSession => session !== undefined)
@@ -114,6 +121,7 @@ async function listLiveSessions(directory: string) {
         title: metadata.title,
         reference: metadata.socketPath,
         availability: SessionAvailability.Live,
+        updatedAt: 0,
       }
     }))
   return sessions.filter((session): session is BackendSession => session !== undefined)
@@ -122,7 +130,15 @@ async function listLiveSessions(directory: string) {
 async function list(directory: string) {
   const [live, stored] = await Promise.all([listLiveSessions(directory), listStoredSessions(directory)])
   const liveIDs = new Set(live.map((session) => session.id))
-  return [...live, ...stored.filter((session) => !liveIDs.has(session.id))]
+  const storedByID = new Map(stored.map((session) => [session.id, session]))
+  return [
+    ...live.map((session) => ({
+      ...session,
+      title: session.title ?? storedByID.get(session.id)?.title,
+      updatedAt: storedByID.get(session.id)?.updatedAt ?? session.updatedAt,
+    })),
+    ...stored.filter((session) => !liveIDs.has(session.id)),
+  ]
 }
 
 async function promptLiveSession(session: BackendSession, prompt: string) {

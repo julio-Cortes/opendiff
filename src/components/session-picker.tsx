@@ -2,11 +2,14 @@ import type { ScrollBoxRenderable } from "@opentui/core"
 import { createEffect, For } from "solid-js"
 import type { BackendSession } from "../backends/types"
 import { COLORS } from "../config"
+import { Footer } from "./footer"
 
 type SessionPickerProps = {
   directory: string
   sessions: BackendSession[]
   selected: number
+  query: string
+  onQuery: (query: string) => void
 }
 
 export function SessionPicker(props: SessionPickerProps) {
@@ -24,13 +27,23 @@ export function SessionPicker(props: SessionPickerProps) {
       </box>
       <box flexGrow={1} alignItems="center" justifyContent="center">
         <box width="80%" maxWidth={100} height="70%" flexDirection="column" borderStyle="single" borderColor={COLORS.selection}>
-          <box height={2} paddingLeft={1} flexDirection="column">
+          <box height={3} paddingLeft={1} paddingRight={1} flexDirection="column">
             <text fg={COLORS.text}>Sessions in {props.directory}</text>
             <text fg={COLORS.textMuted}>{props.sessions.length} available</text>
+            <input
+              focused
+              placeholder="Search sessions"
+              value={props.query}
+              textColor={COLORS.text}
+              backgroundColor={COLORS.canvas}
+              focusedTextColor={COLORS.text}
+              focusedBackgroundColor={COLORS.canvas}
+              onInput={props.onQuery}
+            />
           </box>
           {props.sessions.length === 0 ? (
             <box flexGrow={1} alignItems="center" justifyContent="center">
-              <text fg={COLORS.textMuted}>No agent sessions in this directory</text>
+              <text fg={COLORS.textMuted}>No matching sessions</text>
             </box>
           ) : (
             <scrollbox ref={(element) => (sessionList = element)} flexGrow={1} scrollX={false} scrollY>
@@ -49,9 +62,7 @@ export function SessionPicker(props: SessionPickerProps) {
           )}
         </box>
       </box>
-      <box height={1} paddingLeft={1} backgroundColor={COLORS.panel}>
-        <text fg={COLORS.textMuted}>j/k navigate  enter select  q quit</text>
-      </box>
+      <Footer context="session-picker" />
     </box>
   )
 }
