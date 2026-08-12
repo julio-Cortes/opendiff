@@ -459,12 +459,6 @@ function App() {
     const pressed = (bindings: readonly Keybind[]) =>
       bindings.some((binding) => binding.name === key.name && Boolean(binding.ctrl) === key.ctrl)
 
-    if (pressed(KEYBINDS.edit)) {
-      key.preventDefault()
-      key.stopPropagation()
-      void edit()
-      return
-    }
     if (pressed(KEYBINDS.nextChange)) {
       key.preventDefault()
       key.stopPropagation()
@@ -601,6 +595,12 @@ function App() {
         const selectedSession = initialSessions.data[sessionIndex()]
         if (selectedSession) void selectSession(selectedSession)
       }
+      return
+    }
+    if (pressed(KEYBINDS.edit)) {
+      key.preventDefault()
+      key.stopPropagation()
+      void edit()
       return
     }
     if (pressed(KEYBINDS.previousPane)) {
