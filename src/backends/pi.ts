@@ -211,9 +211,10 @@ async function promptStoredSession(session: BackendSession, directory: string, p
   return response
 }
 
-function prompt(session: BackendSession, directory: string, prompt: string) {
-  return session.availability === SessionAvailability.Live
-    ? promptLiveSession(session, prompt)
+async function prompt(session: BackendSession, directory: string, prompt: string) {
+  const liveSession = (await listLiveSessions(directory)).find((candidate) => candidate.id === session.id)
+  return liveSession
+    ? promptLiveSession(liveSession, prompt)
     : promptStoredSession(session, directory, prompt)
 }
 
