@@ -40,6 +40,7 @@ import {
 import { loadReviewComments, saveReviewComments, type ReviewComment } from "./review-comments"
 import { loadSettings, saveSettings } from "./settings"
 import { loadFeaturePlan, togglePlanTask } from "./plans"
+import { listPiSessions, promptPiSession } from "./pi-sessions"
 
 const endpoint = await Service.ensure()
 const client = OpenCode.make({
@@ -52,10 +53,21 @@ const loadDiff = (mode: DiffMode) => client.vcs.diff({
 })
 const initialResult = await loadDiff(DIFF_MODE.working)
 const initialSettings = await loadSettings()
-const initialSessions = await client.session.list({
+const openCodeSessions = await client.session.list({
   directory: process.cwd(),
   order: "desc",
 })
+const piSessions = await listPiSessions(process.cwd())
+const initialSessions = [
+  ...openCodeSessions.data.map((session) => ({
+    backend: "opencode" as const,
+    id: session.id,
+    title: session.title,
+  })),
+  ...piSessions.map((session) => ({
+    ...session,
+  })),
+]
 const initialPlan = await loadFeaturePlan(initialResult.location.directory)
 const renderer = await createCliRenderer({ exitOnCtrlC: false })
 try {
@@ -97,7 +109,7 @@ function App() {
   let editing = false
   const [result, setResult] = createSignal(initialResult)
   const [sessionIndex, setSessionIndex] = createSignal(0)
-  const [session, setSession] = createSignal<(typeof initialSessions.data)[number]>()
+  const [session, setSession] = createSignal<(typeof initialSessions)[number]>()
   const [selected, setSelected] = createSignal(0)
   const [selectedDiffLine, setSelectedDiffLine] = createSignal(0)
   const [selectionAnchor, setSelectionAnchor] = createSignal<number>()
@@ -349,16 +361,21 @@ function App() {
     command.run()
   }
 
-  const requestAgentReplies = async (sessionID: string, prompt: string) => {
-    const pending = await client.session.prompt({ sessionID, text: prompt })
-    await client.session.wait({ sessionID }).catch(() => undefined)
-    const messages = await client.message.list({ sessionID, order: "desc", limit: 20 })
-    const response = messages.data.find((message) =>
-      message.type === "assistant" && message.time.created >= pending.timeCreated
-    )
-    const text = response?.type === "assistant"
-      ? response.content.filter((part) => part.type === "text").map((part) => part.text).join("")
-      : ""
+  const requestAgentReplies = async (selectedSession: NonNullable<ReturnType<typeof session>>, prompt: string) => {
+    let text = ""
+    if (selectedSession.backend === "opencode") {
+      const pending = await client.session.prompt({ sessionID: selectedSession.id, text: prompt })
+      await client.session.wait({ sessionID: selectedSession.id }).catch(() => undefined)
+      const messages = await client.message.list({ sessionID: selectedSession.id, order: "desc", limit: 20 })
+      const response = messages.data.find((message) =>
+        message.type === "assistant" && message.time.created >= pending.timeCreated
+      )
+      text = response?.type === "assistant"
+        ? response.content.filter((part) => part.type === "text").map((part) => part.text).join("")
+        : ""
+    } else {
+      text = await promptPiSession(selectedSession.path, process.cwd(), prompt)
+    }
     const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].at(-1)?.[1]
     const parsed = JSON.parse(fenced ?? text) as { replies: Array<{ id: string; body: string }> }
     return new Map(parsed.replies.map((reply) => [reply.id, reply.body]))
@@ -381,7 +398,7 @@ function App() {
       await saveReviewComments(result().location.directory, selectedSession.id, submitted)
       const snippet = target.snippet ?? getDiffSnippet(target.patch, view(), target.start, target.end)
       const prompt = `Follow up on review comment ${target.id}. Address the review comment and return only JSON: {"replies":[{"id":"${target.id}","body":"your response"}]}\nFile: ${target.file}\nSelected lines:\n${snippet}\nComment: ${body}`
-      const replies = await requestAgentReplies(selectedSession.id, prompt)
+      const replies = await requestAgentReplies(selectedSession, prompt)
       const agentBody = replies.get(target.id)
       if (!agentBody) return
       const answered = submitted.map((comment) => comment.id === target.id
@@ -418,7 +435,7 @@ function App() {
       await saveReviewComments(result().location.directory, selectedSession.id, submitted)
 
       const prompt = `Address these review comments and return only JSON with one reply per ID: {"replies":[{"id":"comment-id","body":"summary"}]}\n\n${drafts.map((comment) => `${comment.id} ${comment.file}\n${comment.snippet ?? getDiffSnippet(comment.patch, view(), comment.start, comment.end)}\nComment: ${comment.body}`).join("\n\n")}`
-      const replies = await requestAgentReplies(selectedSession.id, prompt)
+      const replies = await requestAgentReplies(selectedSession, prompt)
       const answered = submitted.map((comment) => {
         const body = replies.get(comment.id)
         if (!body) return comment
@@ -586,13 +603,13 @@ function App() {
     }
     if (!session()) {
       if (pressed(KEYBINDS.down)) {
-        setSessionIndex((index) => Math.min(index + 1, Math.max(initialSessions.data.length - 1, 0)))
+        setSessionIndex((index) => Math.min(index + 1, Math.max(initialSessions.length - 1, 0)))
       }
       if (pressed(KEYBINDS.up)) {
         setSessionIndex((index) => Math.max(index - 1, 0))
       }
       if (pressed(KEYBINDS.select)) {
-        const selectedSession = initialSessions.data[sessionIndex()]
+        const selectedSession = initialSessions[sessionIndex()]
         if (selectedSession) void selectSession(selectedSession)
       }
       return
@@ -759,7 +776,7 @@ function App() {
       fallback={
         <SessionPicker
           directory={process.cwd()}
-          sessions={initialSessions.data}
+          sessions={initialSessions}
           selected={sessionIndex()}
         />
       }
