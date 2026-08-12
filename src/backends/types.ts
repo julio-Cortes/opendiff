@@ -3,11 +3,17 @@ export enum SessionBackend {
   Pi = "pi",
 }
 
+export enum SessionAvailability {
+  Live = "live",
+  Stored = "stored",
+}
+
 export type BackendSession = {
   backend: SessionBackend
   id: string
   title?: string
   reference: string
+  availability: SessionAvailability
 }
 
 export type SessionBackendAdapter = {

@@ -41,7 +41,7 @@ export function SessionPicker(props: SessionPickerProps) {
                     fg={props.selected === index() ? COLORS.textStrong : COLORS.textMuted}
                     bg={props.selected === index() ? COLORS.selection : COLORS.canvas}
                   >
-                    [{session.backend}] {session.title ?? "Untitled session"}  {session.id}
+                    [{session.backend}, {session.availability}] {session.title ?? "Untitled session"}  {session.id}
                   </text>
                 )}
               </For>

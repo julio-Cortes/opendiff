@@ -1,5 +1,5 @@
 import { OpenCode } from "@opencode-ai/client"
-import { SessionBackend, type SessionBackendAdapter } from "./types"
+import { SessionAvailability, SessionBackend, type SessionBackendAdapter } from "./types"
 
 type Client = ReturnType<typeof OpenCode.make>
 
@@ -22,6 +22,7 @@ export function createOpenCodeBackend(client: Client): SessionBackendAdapter {
         id: session.id,
         title: session.title,
         reference: session.id,
+        availability: SessionAvailability.Live,
       }))
     },
     async prompt(session, _directory, prompt) {
