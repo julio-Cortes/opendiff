@@ -9,5 +9,5 @@
     "strict": true,
     "types": ["bun"]
   },
-  "include": ["src", "pi"]
+  "include": ["src", "pi", "scripts"]
 }
