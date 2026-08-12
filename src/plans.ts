@@ -1,4 +1,5 @@
 import { basename, join, relative } from "node:path"
+import { SessionBackend } from "./backends/types"
 
 export type PlanTask = {
   line: number
@@ -22,6 +23,11 @@ export type FeaturePlan = {
   prs: PlanPr[]
 }
 
+const PLAN_DIRECTORY: Record<SessionBackend, string> = {
+  [SessionBackend.OpenCode]: ".opencode",
+  [SessionBackend.Pi]: ".pi",
+}
+
 const value = (content: string, label: string) =>
   content.match(new RegExp(`^${label}:\\s*([^\\n]+)`, "mi"))?.[1]?.replaceAll("`", "").trim() ?? ""
 
@@ -43,8 +49,8 @@ const parsePr = (root: string, path: string, content: string): PlanPr => {
   }
 }
 
-export async function loadFeaturePlan(root: string): Promise<FeaturePlan | undefined> {
-  const plans = join(root, ".opencode", "plans")
+export async function loadFeaturePlan(root: string, backend: SessionBackend): Promise<FeaturePlan | undefined> {
+  const plans = join(root, PLAN_DIRECTORY[backend], "plans")
   const active = Bun.file(join(plans, "ACTIVE"))
   if (!(await active.exists())) return
 

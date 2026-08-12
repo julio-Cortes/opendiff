@@ -42,7 +42,7 @@ import {
 } from "./diff-navigation"
 import { loadReviewComments, saveReviewComments, type ReviewComment } from "./review-comments"
 import { loadSettings, saveSettings } from "./settings"
-import { loadFeaturePlan, togglePlanTask } from "./plans"
+import { loadFeaturePlan, togglePlanTask, type FeaturePlan } from "./plans"
 
 const endpoint = await Service.ensure()
 const client = OpenCode.make({
@@ -61,7 +61,6 @@ const loadDiff = (mode: DiffMode) => client.vcs.diff({
 const initialResult = await loadDiff(DIFF_MODE.working)
 const initialSettings = await loadSettings()
 const initialSessions = await loadSessions()
-const initialPlan = await loadFeaturePlan(initialResult.location.directory)
 const renderer = await createCliRenderer({ exitOnCtrlC: false })
 try {
   const palette = await renderer.getPalette({ size: 16 })
@@ -127,9 +126,9 @@ function App() {
   const [mode, setMode] = createSignal<DiffMode>(DIFF_MODE.working)
   const [view, setView] = createSignal<DiffView>(initialSettings.view)
   const [wrap, setWrap] = createSignal<DiffWrap>(initialSettings.wrap)
-  const [plan, setPlan] = createSignal(initialPlan)
+  const [plan, setPlan] = createSignal<FeaturePlan>()
   const [planOpen, setPlanOpen] = createSignal(false)
-  const [selectedPr, setSelectedPr] = createSignal(Math.max(initialPlan?.prs.findIndex((pr) => pr.number === initialPlan.currentPr) ?? 0, 0))
+  const [selectedPr, setSelectedPr] = createSignal(0)
   const [selectedTask, setSelectedTask] = createSignal(0)
   const [focusedPlanSection, setFocusedPlanSection] = createSignal<"prs" | "tasks">("prs")
   const current = () => result().data[selected()]
@@ -172,7 +171,8 @@ function App() {
     setSelectionAnchor()
     if (nextMode !== mode()) setSelectedDiffLine(0)
     setMode(nextMode)
-    const nextPlan = await loadFeaturePlan(next.location.directory)
+    const selectedSession = session()
+    const nextPlan = selectedSession ? await loadFeaturePlan(next.location.directory, selectedSession.backend) : undefined
     setPlan(nextPlan)
     setSelectedPr((index) => Math.min(index, Math.max((nextPlan?.prs.length ?? 1) - 1, 0)))
     setSelectedTask((index) => Math.min(index, Math.max((nextPlan?.prs[selectedPr()]?.tasks.length ?? 1) - 1, 0)))
@@ -246,7 +246,14 @@ function App() {
 
   const selectSession = async (selectedSession: NonNullable<ReturnType<typeof session>>) => {
     const repository = result().location.directory
-    setComments(await loadReviewComments(repository, selectedSession.id))
+    const [nextComments, nextPlan] = await Promise.all([
+      loadReviewComments(repository, selectedSession.id),
+      loadFeaturePlan(repository, selectedSession.backend),
+    ])
+    setComments(nextComments)
+    setPlan(nextPlan)
+    setSelectedPr(Math.max(nextPlan?.prs.findIndex((pr) => pr.number === nextPlan.currentPr) ?? 0, 0))
+    setSelectedTask(0)
     setSession(selectedSession)
   }
 
