@@ -1,14 +1,11 @@
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { createEffect, For } from "solid-js"
+import type { BackendSession } from "../backends/types"
 import { COLORS } from "../config"
 
 type SessionPickerProps = {
   directory: string
-  sessions: Array<{
-    id: string
-    title?: string
-    backend: "opencode" | "pi"
-  }>
+  sessions: BackendSession[]
   selected: number
 }
 

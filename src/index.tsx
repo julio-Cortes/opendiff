@@ -6,6 +6,9 @@ import { createCliRenderer, type DiffRenderable, ScrollBoxRenderable, TextareaRe
 import { render, useKeyboard, useRenderer } from "@opentui/solid"
 import { basename, resolve } from "node:path"
 import { createEffect, createSignal, For, Show } from "solid-js"
+import { createOpenCodeBackend } from "./backends/opencode"
+import { piBackend } from "./backends/pi"
+import type { SessionBackendAdapter } from "./backends/types"
 import { DiffPane } from "./components/diff-pane"
 import { FileTree } from "./components/file-tree"
 import { Footer } from "./components/footer"
@@ -40,34 +43,21 @@ import {
 import { loadReviewComments, saveReviewComments, type ReviewComment } from "./review-comments"
 import { loadSettings, saveSettings } from "./settings"
 import { loadFeaturePlan, togglePlanTask } from "./plans"
-import { listPiSessions, promptPiSession } from "./pi-sessions"
 
 const endpoint = await Service.ensure()
 const client = OpenCode.make({
   baseUrl: endpoint.url,
   headers: Service.headers(endpoint),
 })
+const sessionBackends: SessionBackendAdapter[] = [createOpenCodeBackend(client), piBackend]
+const sessionBackendByName = new Map(sessionBackends.map((backend) => [backend.backend, backend]))
 const loadDiff = (mode: DiffMode) => client.vcs.diff({
   location: { directory: process.cwd() },
   mode,
 })
 const initialResult = await loadDiff(DIFF_MODE.working)
 const initialSettings = await loadSettings()
-const openCodeSessions = await client.session.list({
-  directory: process.cwd(),
-  order: "desc",
-})
-const piSessions = await listPiSessions(process.cwd())
-const initialSessions = [
-  ...openCodeSessions.data.map((session) => ({
-    backend: "opencode" as const,
-    id: session.id,
-    title: session.title,
-  })),
-  ...piSessions.map((session) => ({
-    ...session,
-  })),
-]
+const initialSessions = (await Promise.all(sessionBackends.map((backend) => backend.list(process.cwd())))).flat()
 const initialPlan = await loadFeaturePlan(initialResult.location.directory)
 const renderer = await createCliRenderer({ exitOnCtrlC: false })
 try {
@@ -362,20 +352,9 @@ function App() {
   }
 
   const requestAgentReplies = async (selectedSession: NonNullable<ReturnType<typeof session>>, prompt: string) => {
-    let text = ""
-    if (selectedSession.backend === "opencode") {
-      const pending = await client.session.prompt({ sessionID: selectedSession.id, text: prompt })
-      await client.session.wait({ sessionID: selectedSession.id }).catch(() => undefined)
-      const messages = await client.message.list({ sessionID: selectedSession.id, order: "desc", limit: 20 })
-      const response = messages.data.find((message) =>
-        message.type === "assistant" && message.time.created >= pending.timeCreated
-      )
-      text = response?.type === "assistant"
-        ? response.content.filter((part) => part.type === "text").map((part) => part.text).join("")
-        : ""
-    } else {
-      text = await promptPiSession(selectedSession.path, process.cwd(), prompt)
-    }
+    const backend = sessionBackendByName.get(selectedSession.backend)
+    if (!backend) throw new Error(`Unsupported session backend: ${selectedSession.backend}`)
+    const text = await backend.prompt(selectedSession, process.cwd(), prompt)
     const fenced = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)].at(-1)?.[1]
     const parsed = JSON.parse(fenced ?? text) as { replies: Array<{ id: string; body: string }> }
     return new Map(parsed.replies.map((reply) => [reply.id, reply.body]))
