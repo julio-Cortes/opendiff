@@ -123,10 +123,12 @@ export function highlightDiffRange(
   const selected: SelectedLine[] = []
   const first = Math.min(start, end)
   const last = Math.max(start, end)
-  const lineNumbers = getLineNumberRenderables(diff)
+  const lineNumbers = getLineNumberRenderables(diff).map((renderable) => ({
+    renderable,
+    current: renderable.getLineColors(),
+  }))
   for (let line = first; line <= last; line++) {
-    const colors = lineNumbers.map((renderable) => {
-      const current = renderable.getLineColors()
+    const colors = lineNumbers.map(({ renderable, current }) => {
       const saved = {
         renderable,
         gutter: current.gutter.get(line),
