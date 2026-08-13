@@ -18,9 +18,22 @@ const commentSigns = new WeakMap<DiffRenderable, Array<{
 }>>()
 let changeOffsetsPatch = ""
 let changeOffsets: Partial<Record<DiffView, number[]>> = {}
+const diffRenderables = new WeakMap<DiffRenderable, {
+  children: ReturnType<DiffRenderable["getChildren"]>
+  code: CodeRenderable[]
+  lineNumbers: LineNumberRenderable[]
+}>()
 
-function getCodeRenderables(diff: DiffRenderable | undefined) {
-  const pending = diff ? [...diff.getChildren()] : []
+function getDiffRenderables(diff: DiffRenderable | undefined) {
+  if (!diff) return { code: [], lineNumbers: [] }
+
+  const children = diff.getChildren()
+  const cached = diffRenderables.get(diff)
+  if (cached && cached.children.length === children.length && cached.children.every((child, index) => child === children[index])) {
+    return cached
+  }
+
+  const pending = [...children]
   const codeRenderables: CodeRenderable[] = []
 
   while (pending.length > 0) {
@@ -30,13 +43,8 @@ function getCodeRenderables(diff: DiffRenderable | undefined) {
     pending.push(...renderable.getChildren())
   }
 
-  return codeRenderables
-}
-
-function getLineNumberRenderables(diff: DiffRenderable) {
-  const pending = [...diff.getChildren()].reverse()
   const lineNumbers: LineNumberRenderable[] = []
-
+  pending.push(...[...children].reverse())
   while (pending.length > 0) {
     const renderable = pending.pop()
     if (!renderable) continue
@@ -44,7 +52,17 @@ function getLineNumberRenderables(diff: DiffRenderable) {
     pending.push(...renderable.getChildren().reverse())
   }
 
-  return lineNumbers
+  const renderables = { children, code: codeRenderables, lineNumbers }
+  diffRenderables.set(diff, renderables)
+  return renderables
+}
+
+function getCodeRenderables(diff: DiffRenderable | undefined) {
+  return getDiffRenderables(diff).code
+}
+
+function getLineNumberRenderables(diff: DiffRenderable) {
+  return getDiffRenderables(diff).lineNumbers
 }
 
 export function markDiffComments(
