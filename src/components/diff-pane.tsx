@@ -44,6 +44,8 @@ export function DiffPane(props: DiffPaneProps) {
         flexGrow={1}
         addedBg={COLORS.addedBackground}
         removedBg={COLORS.removedBackground}
+        addedSignColor={COLORS.added}
+        removedSignColor={COLORS.removed}
         addedLineNumberBg={COLORS.addedBackground}
         removedLineNumberBg={COLORS.removedBackground}
         contextBg={COLORS.canvas}
