@@ -23,6 +23,9 @@ let snippetRowsView: DiffView | undefined
 let snippetRows: string[][] = []
 let diffLineNumbersPatch = ""
 let diffLineNumbers: Array<number | undefined> = []
+let remapPatch = ""
+let unifiedToSplit: number[] = []
+let splitToUnified: number[] = []
 const diffRenderables = new WeakMap<DiffRenderable, {
   children: ReturnType<DiffRenderable["getChildren"]>
   code: CodeRenderable[]
@@ -177,62 +180,50 @@ export function highlightDiffRange(
 export function remapDiffLine(patch: string, from: DiffView, to: DiffView, line: number) {
   if (from === to) return line
 
-  const lines: Array<string | undefined> = []
-  let inHunk = false
-  for (const patchLine of patch.split("\n")) {
-    if (patchLine.startsWith("@@")) {
-      if (inHunk) lines.push(undefined)
-      inHunk = true
-      continue
-    }
-    if (inHunk && /^[ +\-\\]/.test(patchLine)) lines.push(patchLine)
-  }
+  if (patch !== remapPatch) {
+    remapPatch = patch
+    unifiedToSplit = []
+    splitToUnified = []
+    let unifiedRow = 0
+    let splitRow = 0
+    let removed = 0
+    let added = 0
 
-  let index = 0
-  let fromRow = 0
-  let toRow = 0
-  while (index < lines.length) {
-    const marker = lines[index]?.[0]
-    if (marker === undefined) {
-      index++
-      continue
-    }
-    if (marker === "\\") {
-      index++
-      continue
-    }
-    if (marker === " ") {
-      if (line === fromRow) return toRow
-      fromRow++
-      toRow++
-      index++
-      continue
-    }
-
-    let additions = 0
-    let deletions = 0
-    while (index < lines.length && lines[index]?.[0] !== " " && lines[index]?.[0] !== undefined) {
-      if (lines[index]?.[0] === "+") additions++
-      if (lines[index]?.[0] === "-") deletions++
-      index++
-    }
-
-    const fromSize = from === DIFF_VIEW.unified ? additions + deletions : Math.max(additions, deletions)
-    const toSize = to === DIFF_VIEW.unified ? additions + deletions : Math.max(additions, deletions)
-    if (line < fromRow + fromSize) {
-      const offset = line - fromRow
-      if (from === DIFF_VIEW.unified) {
-        const item = offset < deletions ? offset : offset - deletions
-        return toRow + Math.min(item, Math.max(toSize - 1, 0))
+    const flush = () => {
+      const splitSize = Math.max(removed, added)
+      for (let offset = 0; offset < removed + added; offset++) {
+        const item = offset < removed ? offset : offset - removed
+        unifiedToSplit[unifiedRow + offset] = splitRow + Math.min(item, Math.max(splitSize - 1, 0))
       }
-      if (offset < additions) return toRow + deletions + offset
-      return toRow + Math.min(offset, Math.max(deletions - 1, 0))
+      for (let offset = 0; offset < splitSize; offset++) {
+        splitToUnified[splitRow + offset] = unifiedRow + (offset < added ? removed + offset : Math.min(offset, Math.max(removed - 1, 0)))
+      }
+      unifiedRow += removed + added
+      splitRow += splitSize
+      removed = 0
+      added = 0
     }
-    fromRow += fromSize
-    toRow += toSize
+
+    let inHunk = false
+    for (const patchLine of patch.split("\n")) {
+      if (patchLine.startsWith("@@")) {
+        flush()
+        inHunk = true
+        continue
+      }
+      if (!inHunk || patchLine.startsWith("\\")) continue
+      if (patchLine.startsWith("-")) removed++
+      else if (patchLine.startsWith("+")) added++
+      else if (patchLine.startsWith(" ")) {
+        flush()
+        unifiedToSplit[unifiedRow++] = splitRow
+        splitToUnified[splitRow++] = unifiedRow - 1
+      }
+    }
+    flush()
   }
 
-  return line
+  return (from === DIFF_VIEW.unified ? unifiedToSplit : splitToUnified)[line] ?? line
 }
 
 export function getDiffSnippet(patch: string, view: DiffView, start: number, end: number) {
