@@ -147,7 +147,6 @@ function App() {
   )
   const displayedComments = () => openedComment() ? [openedComment()!] : selectedComments()
   const footerContext = () => {
-    if (submittingComments()) return "loading" as const
     if (commentDraft() || editingComment() || replyingComment()) return "comment-editor" as const
     if (errorLogVisible()) return "error-log" as const
     if (paletteVisible()) return "command-palette" as const
@@ -893,34 +892,6 @@ function App() {
               </Show>
             </scrollbox>
             <text fg={COLORS.textMuted}>esc close</text>
-          </box>
-        </box>
-      </Show>
-      <Show when={submittingComments()}>
-        <box
-          position="absolute"
-          top={0}
-          left={0}
-          width="100%"
-          height="100%"
-          alignItems="center"
-          justifyContent="center"
-        >
-          <box
-            width="50%"
-            maxWidth={64}
-            height={7}
-            padding={1}
-            flexDirection="column"
-            alignItems="center"
-            justifyContent="center"
-            borderStyle="single"
-            borderColor={COLORS.syntaxProperty}
-            backgroundColor={COLORS.panel}
-          >
-            <text fg={COLORS.syntaxProperty}><b>Agent is working...</b></text>
-            <text fg={COLORS.text}>Waiting for the review response</text>
-            <text fg={COLORS.textMuted}>Comments were sent to {session()?.title ?? session()?.id}</text>
           </box>
         </box>
       </Show>

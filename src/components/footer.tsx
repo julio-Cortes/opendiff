@@ -1,6 +1,6 @@
 import { COLORS, formatKeybind, KEYBINDS } from "../config"
 
-export type FooterContext = "diff" | "files" | "plan" | "thread" | "comment-editor" | "comment-list" | "command-palette" | "error-log" | "loading" | "session-picker"
+export type FooterContext = "diff" | "files" | "plan" | "thread" | "comment-editor" | "comment-list" | "command-palette" | "error-log" | "session-picker"
 
 type FooterProps = {
   context: FooterContext
@@ -17,7 +17,6 @@ const HELP: Record<FooterContext, string> = {
   "comment-list": `${key("down")}/${key("up")} navigate  ${key("select")} open  ${key("editComment")} edit draft  ${key("deleteComment")} delete  ${key("sendComments")} send  esc close`,
   "command-palette": "type to search  up/down select  enter run  esc close",
   "error-log": "esc close",
-  loading: "Agent is responding to review comments",
   "session-picker": `up/down navigate  ${key("select")} select  ${key("refreshSessions")} refresh  ${key("quitSessionPicker")} quit`,
 }
 
