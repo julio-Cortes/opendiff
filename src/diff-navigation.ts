@@ -16,6 +16,8 @@ const commentSigns = new WeakMap<DiffRenderable, Array<{
   renderable: LineNumberRenderable
   sign: LineSign | undefined
 }>>()
+let changeOffsetsPatch = ""
+let changeOffsets: Partial<Record<DiffView, number[]>> = {}
 
 function getCodeRenderables(diff: DiffRenderable | undefined) {
   const pending = diff ? [...diff.getChildren()] : []
@@ -302,6 +304,13 @@ export function getDiffLineNumber(
 }
 
 function getChangeOffsets(patch: string, view: DiffView) {
+  if (patch !== changeOffsetsPatch) {
+    changeOffsetsPatch = patch
+    changeOffsets = {}
+  }
+  const cached = changeOffsets[view]
+  if (cached) return cached
+
   const hunks: string[][] = []
 
   for (const line of patch.split("\n")) {
@@ -341,6 +350,7 @@ function getChangeOffsets(patch: string, view: DiffView) {
     }
   }
 
+  changeOffsets[view] = offsets
   return offsets
 }
 
