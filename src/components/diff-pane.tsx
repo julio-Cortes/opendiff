@@ -40,6 +40,7 @@ export function DiffPane(props: DiffPaneProps) {
         syncScroll
         showLineNumbers
         lineNumberFg={COLORS.textMuted}
+        lineNumberBg={COLORS.canvas}
         wrapMode={props.wrap}
         flexGrow={1}
         addedBg={COLORS.addedBackground}
