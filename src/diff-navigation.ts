@@ -18,6 +18,9 @@ const commentSigns = new WeakMap<DiffRenderable, Array<{
 }>>()
 let changeOffsetsPatch = ""
 let changeOffsets: Partial<Record<DiffView, number[]>> = {}
+let snippetRowsPatch = ""
+let snippetRowsView: DiffView | undefined
+let snippetRows: string[][] = []
 const diffRenderables = new WeakMap<DiffRenderable, {
   children: ReturnType<DiffRenderable["getChildren"]>
   code: CodeRenderable[]
@@ -231,6 +234,10 @@ export function remapDiffLine(patch: string, from: DiffView, to: DiffView, line:
 }
 
 export function getDiffSnippet(patch: string, view: DiffView, start: number, end: number) {
+  if (patch === snippetRowsPatch && view === snippetRowsView) {
+    return snippetRows.slice(start, end + 1).flat().join("\n")
+  }
+
   const hunks: string[][] = []
   for (const line of patch.split("\n")) {
     if (line.startsWith("@@")) {
@@ -275,6 +282,9 @@ export function getDiffSnippet(patch: string, view: DiffView, start: number, end
     }
   }
 
+  snippetRowsPatch = patch
+  snippetRowsView = view
+  snippetRows = rows
   return rows.slice(start, end + 1).flat().join("\n")
 }
 
