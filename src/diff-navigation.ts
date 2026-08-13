@@ -21,6 +21,8 @@ let changeOffsets: Partial<Record<DiffView, number[]>> = {}
 let snippetRowsPatch = ""
 let snippetRowsView: DiffView | undefined
 let snippetRows: string[][] = []
+let diffLineNumbersPatch = ""
+let diffLineNumbers: Array<number | undefined> = []
 const diffRenderables = new WeakMap<DiffRenderable, {
   children: ReturnType<DiffRenderable["getChildren"]>
   code: CodeRenderable[]
@@ -305,30 +307,27 @@ export function getDiffLineNumber(
     return previous ? previous[1] + 1 : 1
   }
 
-  const hunks: Array<{ newStart: number; lines: string[] }> = []
+  if (patch !== diffLineNumbersPatch) {
+    diffLineNumbersPatch = patch
+    diffLineNumbers = []
+    let newLine = 0
+    let inHunk = false
 
-  for (const line of patch.split("\n")) {
-    const header = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
-    if (header) {
-      hunks.push({ newStart: Number(header[1]), lines: [] })
-      continue
-    }
-    if (hunks.length > 0 && /^[ +\-\\]/.test(line)) hunks.at(-1)?.lines.push(line)
-  }
-
-  let row = 0
-
-  for (const hunk of hunks) {
-    let newLine = hunk.newStart
-
-    for (const line of hunk.lines) {
+    for (const line of patch.split("\n")) {
+      const header = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
+      if (header) {
+        newLine = Number(header[1])
+        inHunk = true
+        continue
+      }
       const marker = line[0]
-      if (marker === "\\") continue
-      if (row === selectedLine) return Math.max(newLine, 1)
+      if (!inHunk || !/^[ +\-\\]/.test(line) || marker === "\\") continue
+      diffLineNumbers.push(Math.max(newLine, 1))
       if (marker !== "-") newLine++
-      row++
     }
   }
+
+  return diffLineNumbers[selectedLine]
 }
 
 function getChangeOffsets(patch: string, view: DiffView) {
