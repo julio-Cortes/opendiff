@@ -39,10 +39,13 @@ export function DiffPane(props: DiffPaneProps) {
         view={props.view}
         syncScroll
         showLineNumbers
+        lineNumberFg={COLORS.textMuted}
         wrapMode={props.wrap}
         flexGrow={1}
         addedBg={COLORS.addedBackground}
         removedBg={COLORS.removedBackground}
+        addedLineNumberBg={COLORS.addedBackground}
+        removedLineNumberBg={COLORS.removedBackground}
         contextBg={COLORS.canvas}
       />
     </box>
